@@ -97,3 +97,15 @@ def cleanup_open_subtitles(text, seq_length):
 def cleanup_switchboard(text, seq_length):
     # No start or end tokens because the text seems to be cut.
     return text + ''.join(seq_length * [PADDING_TOKEN])
+
+
+def cleanup_captions(text, seq_length):
+    # Put each caption on a new line.
+    text = cleanup_extra_spaces(text)
+    space_before_apostroph = re.compile(r"([\w\d])[ \t\u00A0](['’]\w)")
+    #space_before_quote = re.compile(r"[ \t\u00A0](['’])")
+    #space_after_quote = re.compile(r"([`])[ \t\u00A0]")
+    #text = space_before_quote.sub(r'\1', text)
+    #text = space_after_quote.sub(r'\1', text)
+    text = space_before_apostroph.sub(r'\1\2', text)
+    return START_TOKEN + text + _make_padding_sequence(seq_length)

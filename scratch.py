@@ -1,0 +1,140 @@
+import pandas as pd
+from datasets import load_dataset
+import json
+
+
+# Count the number of words in the captions for conceptual captions dataset.
+cc_3m_training_exists = pd.read_csv("cc_3m_training_exists/concatenated_training_exists_with_captions.tsv", sep="\t", compression='gzip')
+
+# Select the rows only where exists=1.
+cc_3m_training_exists_filtered = cc_3m_training_exists[cc_3m_training_exists['exists'] == 1]
+
+# Create a list with all the captions from the filtered dataframe.
+existing_captions = cc_3m_training_exists_filtered['caption'].tolist()
+
+# Flatten the list of captions into a single string.
+existing_captions_string = " ".join(existing_captions)
+
+# Count the number of words in the string.
+number_of_words = len(existing_captions_string.split())
+
+
+
+
+
+
+
+
+import sys
+sys.path.append('/home/rsaha/projects/babylm/')
+sys.path.append('/home/rsaha/projects/babylm/data/')
+sys.path.append('/home/rsaha/projects/babylm/src/')
+
+
+from tokenizers import Tokenizer, decoders, models, trainers, processors, pre_tokenizers
+from tokenizers.normalizers import NFKC
+
+from pathlib import Path
+from utils.mrclean import *
+from tqdm import tqdm
+import json
+
+
+# Do preprocessing of the json captions for training the tokenizer.
+DATA_ROOT = Path("./")
+SEQ_LENGTH = 128 # this is a legacy parameter, it does not affect cleaning
+DATA_SPLITS = ['train_50M']
+
+CLEANUP_FUNCTIONS = {
+    'aochildes': cleanup_aochildes,
+    'bnc_spoken': cleanup_bnc_spoken,
+    'cbt': cleanup_cbt,
+    'childes': cleanup_children_stories,
+    'gutenberg': cleanup_gutenberg,
+    'open_subtitles': cleanup_open_subtitles,
+    'qed': cleanup_qed,
+    'simple_wiki': cleanup_simple_wikipedia,
+    'switchboard': cleanup_switchboard,
+    'wikipedia': cleanup_wikipedia,
+    'cc_3m_caption': cleanup_captions,
+    'local_narr_captions': cleanup_captions
+}
+
+split = 'caption_data'
+INPUT_DIR = DATA_ROOT / 'data' / split
+OUTPUT_DIR = DATA_ROOT / 'data' / f'{split}_multimodal_clean'
+
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+train_files = [f for f in INPUT_DIR.iterdir() if f.is_file() and f.suffix in ['.json']]
+
+for file in train_files:
+    captions = json.load(open(file))
+    # Create a .txt file with the extension .train and the file name as file.stem.
+    
+    new_file_name = file.stem + ".train"
+    # Create a string that contains all the captions, but each caption is on a new line.
+    all_captions = '\n'.join(captions)
+    
+    # Write to a new file.
+    (OUTPUT_DIR / new_file_name).write_text(all_captions)
+    
+    
+
+local_narr_captions = json.load(open("caption_data/local_narr_captions.json"))
+# Flatten the list of captions into a single string.
+local_narr_captions_string = " ".join(local_narr_captions)
+# Count the number of words in the string.
+number_of_words_local_narr = len(local_narr_captions_string.split())
+
+
+def cleanup_captions(text, seq_length):
+    # Put each caption on a new line.
+    return text
+
+
+
+
+
+
+
+
+"""
+Create a new tsv file that contains the concatenated training exists files with the captions from the original dataset.
+This will later be used to train a model on the images that already exists in the disk.
+"""
+
+
+# import datasets
+# from datasets import load_dataset
+# import pandas as pd
+# import glob
+
+# # First load all the individual tsvs in the cc_3m_training_exists folder and concatenate them.
+
+# all_training_exists_files = glob.glob("cc_3m_training_exists/*.tsv")
+
+# all_dfs = []
+
+# for file in all_training_exists_files:
+#     all_dfs.append(pd.read_csv(file, sep="\t", header=None, compression='gzip'))
+
+# concat_training_exists = pd.concat(all_dfs, ignore_index=True)
+
+# # Rename columns to match the original dataset.
+# mapping = {0: "image_url", 1: "folder", 2: "exists"}
+# concat_training_exists_renamed = concat_training_exists.rename(columns=mapping, inplace=False)
+
+
+# ds = load_dataset("google-research-datasets/conceptual_captions", "unlabeled")
+# df_train = ds['train']
+
+
+# df_train_captions = df_train['caption']
+
+# # Create a new column in the training exists dataframe that contains the captions.
+# concat_training_exists_renamed['caption'] = df_train_captions
+
+
+# # Save the new dataframe to a tsv file with gzip compression.
+# concat_training_exists_renamed.to_csv("cc_3m_training_exists/concatenated_training_exists_with_captions.tsv", sep="\t", index=False, compression='gzip')
