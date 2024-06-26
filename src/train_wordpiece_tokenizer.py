@@ -13,8 +13,7 @@ from tokenizers.normalizers import NFKC
 
 from pathlib import Path
 from utils.mrclean import *
-import tqdm
-import json
+
 
 from tokenizers import Tokenizer
 from tokenizers.models import WordPiece
@@ -31,7 +30,7 @@ DATA_ROOT = Path("./")
 data_dir = Path("./data/train_50M_multimodal_clean/") # Make sure the path is correct here.
 
 paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
-
+print(paths)
 
 tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
 tokenizer.normalizer = normalizers.Sequence([NFD(), Lowercase(), StripAccents()])
@@ -55,28 +54,6 @@ tokenizer.train(paths, trainer)
 
 tokenizer_path =  DATA_ROOT / "src/tokenizer/multi_50m_and_captions_tokenizer_bert_wordpiece.json"
 tokenizer.save(str(tokenizer_path), pretty=True)
-
-
-
-# tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True) 
-# tokenizer.decoder = decoders.ByteLevel()
-# tokenizer.post_processor = processors.ByteLevel(trim_offsets=True)
-# tokenizer.normalizer = NFKC()
-
-
-# trainer = trainers.BpeTrainer(vocab_size=16000, min_frequency=2, special_tokens=["<pad>", "<s>", "</s>"])
-# tokenizer.train(paths, trainer)
-
-
-
-
-
-# Now train a BertWordPiece tokenizer using the similar framework above.
-
-
-
-
-
 
 
 

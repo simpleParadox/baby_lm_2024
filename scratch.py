@@ -6,8 +6,21 @@ import json
 # Count the number of words in the captions for conceptual captions dataset.
 cc_3m_training_exists = pd.read_csv("cc_3m_training_exists/concatenated_training_exists_with_captions.tsv", sep="\t", compression='gzip')
 
+
+
 # Select the rows only where exists=1.
 cc_3m_training_exists_filtered = cc_3m_training_exists[cc_3m_training_exists['exists'] == 1]
+
+
+
+# Randomly drop 10% of the rows.
+cc_3m_training_exists_filtered = cc_3m_training_exists_filtered.sample(frac=0.92, random_state=42)
+
+# Print the number of rows.
+print("Number of rows in the filtered dataframe: ", cc_3m_training_exists_filtered.shape[0])
+
+# Save the filtered dataframe to a tsv file.
+cc_3m_training_exists_filtered.to_csv("cc_3m_training_exists/concatenated_training_exists_with_captions_reduced.tsv", sep="\t", index=False, compression='gzip')
 
 # Create a list with all the captions from the filtered dataframe.
 existing_captions = cc_3m_training_exists_filtered['caption'].tolist()
@@ -17,11 +30,29 @@ existing_captions_string = " ".join(existing_captions)
 
 # Count the number of words in the string.
 number_of_words = len(existing_captions_string.split())
+print("Number of words in the captions for the conceptual captions dataset: ", number_of_words)
+
+DATA_ROOT = Path("./")
+split = 'caption_data'
+INPUT_DIR = DATA_ROOT / 'data' / split
+OUTPUT_DIR = DATA_ROOT / 'data' / f'{split}_multimodal_clean'
+
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+new_file_name = 'cc_3M_captions_reduced' + ".train"
+all_captions = '\n'.join(existing_captions)
+
+(OUTPUT_DIR / new_file_name).write_text(all_captions)
 
 
+# # Load the local_narr_captions.json file to calculate the number of words for that.
+# local_narr_captions = json.load(open("data/caption_data/local_narr_captions.json"))
 
+# # For each caption in the local_narr_captions, count the number of words.
+# number_of_words_local_narr = [len(caption.split()) for caption in local_narr_captions]
 
-
+# # Calculate the total number of words in the local_narr_captions.
+# total_number_of_words_local_narr = sum(number_of_words_local_narr)
 
 
 
@@ -81,16 +112,16 @@ for file in train_files:
     
     
 
-local_narr_captions = json.load(open("caption_data/local_narr_captions.json"))
-# Flatten the list of captions into a single string.
-local_narr_captions_string = " ".join(local_narr_captions)
-# Count the number of words in the string.
-number_of_words_local_narr = len(local_narr_captions_string.split())
+# local_narr_captions = json.load(open("caption_data/local_narr_captions.json"))
+# # Flatten the list of captions into a single string.
+# local_narr_captions_string = " ".join(local_narr_captions)
+# # Count the number of words in the string.
+# number_of_words_local_narr = len(local_narr_captions_string.split())
 
 
-def cleanup_captions(text, seq_length):
-    # Put each caption on a new line.
-    return text
+# def cleanup_captions(text, seq_length):
+#     # Put each caption on a new line.
+#     return text
 
 
 
