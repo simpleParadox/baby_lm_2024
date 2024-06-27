@@ -8,3 +8,6 @@ evaluation-pipeline-2024/
 caption_data/
 
 cc_3m_training_exists/
+
+# ignore env folder
+env/
