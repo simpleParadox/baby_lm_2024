@@ -6,6 +6,8 @@ import random
 import numpy as np
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
+from torch import nn
+
 
 
 # processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
@@ -21,9 +23,11 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 # print(generated_caption)
 
 
-class BabyGitModel():
+class BabyGitModel(nn.Module):
     
     def __init__(self, args=None, use_cuda=False, cuda_device=-1, wandb_object=None):
+
+        super(BabyGitModel, self).__init__()
         # Initialize the class attributes here
         torch.manual_seed(22)
         

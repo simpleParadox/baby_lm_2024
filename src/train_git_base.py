@@ -12,9 +12,6 @@ from PIL import Image
 import numpy as np
 
 
-
-
-
 dataset_processor = ConceptualCaptionsProcessor()
 
 baby_git_model = BabyGitModel()
@@ -41,6 +38,9 @@ def unnormalize_image_for_display(image) -> Image:
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/git-base-coco")
 
+# NEED TO MAKE BABY_GIT INHERIT FROM NN.MODULE
+optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=5e-5)
+
 for (imgs, captions) in dataset_processor.train_dataloader:
 
     if imgs == None:
@@ -54,15 +54,8 @@ for (imgs, captions) in dataset_processor.train_dataloader:
     input_ids = tokenized_captions['input_ids']
     attention_mask = tokenized_captions['attention_mask']
 
-    model_outputs = baby_git_model.forward(input_ids=input_ids, pixel_values=imgs, attention_mask=attention_mask)
+    model_outputs = baby_git_model(input_ids=input_ids, pixel_values=imgs, attention_mask=attention_mask)
 
     loss = model_outputs.loss
 
     print('loss ', loss)
-
-
-
-
-
-    
-
