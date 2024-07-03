@@ -16,6 +16,8 @@ from torchdata.datapipes.iter import IterDataPipe
 from typing import Generator, List, Tuple, Sequence
 import asyncio
 
+from torch import Tensor
+
 TSV_URLS = {
     'train': 'src/datasets/Train-GCC-training.tsv',
     'val': 'src/datasets/Train-GCC-training.tsv'
@@ -59,7 +61,7 @@ class ConceptualCaptionsProcessor(DatasetProcessorParent):
         self.load_val_dataset()
 
 
-    def collate_fn(self, batch):
+    def collate_fn(self, batch) -> tuple[Tensor, list[str]]:
         '''
         batch is a list of tuples?
         each tuple is of the form (image, caption)
@@ -86,11 +88,6 @@ class ConceptualCaptionsProcessor(DatasetProcessorParent):
             return (None, None)
 
         captions = og_captions
-
-
-
-            
-
         preprocessed_images = torch.stack(imgs)
 
         outputs1 = preprocessed_images
