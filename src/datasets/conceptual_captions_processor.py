@@ -32,7 +32,7 @@ class ConceptualCaptionsProcessor(DatasetProcessorParent):
 
     
 
-    def __init__(self, return_org_imgs_collate_fn=False, return_only_captions=False, cuda_device='cuda:0', batch_size=64) -> None:
+    def __init__(self, return_org_imgs_collate_fn=False, return_only_captions=False, cuda_device='cuda:0', batch_size=64, dataset_size=-1) -> None:
 
         self.train_data_pipe: IterDataPipe = None
         self.val_data_pipe: IterDataPipe = None
@@ -42,6 +42,8 @@ class ConceptualCaptionsProcessor(DatasetProcessorParent):
         self.train_dataloader = None
         self.val_dataset = None
         self.val_dataloader = None
+
+        self.dataset_size = dataset_size
         
         self.batch_size = batch_size
 
@@ -117,7 +119,7 @@ class ConceptualCaptionsProcessor(DatasetProcessorParent):
 
     def load_train_dataset(self):
 
-        self.train_data_pipe = conceptual_captions_3m(split="train", buffer_size=256)
+        self.train_data_pipe = conceptual_captions_3m(split="train", buffer_size=256, dataset_size=self.dataset_size)
 
         batch_size = self.batch_size
 
@@ -128,24 +130,6 @@ class ConceptualCaptionsProcessor(DatasetProcessorParent):
 
         self.val_data_pipe = conceptual_captions_3m(split="val")
 
-        # val_indices = torch.randint(0, 15840 , (wandb.config['validation_dataset_size'],))
-
-
-        # subsetting probably doesnt work with data pipes, CHECK LATER IF NEEDED
-        val_indices = torch.arange(0, 1024)
-        val_data_subset = Subset(self.val_data_pipe, val_indices)
-        
-
-
-
-        # no need val dataloader as I'm creating it in do_validation in utils
-
-        # val_dataloader = DataLoader(val_data_subset, batch_size=wandb.config['validation_batch_size'], shuffle=True, collate_fn=self.collate_fn, num_workers=wandb.config['num_workers'], worker_init_fn=self.seed_dataloader_worker)
-
-
-        # set class variables
-        self.val_dataset = val_data_subset
-        # self.val_dataloader = val_dataloader
 
     def print_dataset_stats(self):
 
@@ -208,42 +192,47 @@ def package_images_captions(batch):
         if image is not None:
             yield image, caption
 def _datapipe_from_tsv_url(
-    tsv_url: str, buffer_size: int = 256
+    tsv_url: str, buffer_size: int = 256, dataset_size=-1
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
-    # pipe = HttpReader([tsv_url])
-    # pipe = LineReader(pipe, return_path=False)
 
-    # source_dp = IterableWrapper([(tsv_url, io.StringIO(text1)), ("file2", io.StringIO(text2))])
-
-    datapipe = (
-        dp.iter.FileOpener([tsv_url], mode='r')
+    datapipe =  (dp.iter.FileOpener([tsv_url], mode='r')
         .readlines(return_path=False)
-        .shuffle()
+        
+    )
+
+    if dataset_size > 0:
+        print('applying header')
+        datapipe = (datapipe
+        .header(dataset_size)
+        # NO SHUFFLING
+        )
+
+    else:
+        datapipe = (
+            datapipe
+            # NO HEADER
+            .shuffle()
+            
+        )
+
+
+
+    datapipe: dp = (
+        datapipe
         .sharding_filter()
         .map(lambda line: line.split("\t"))
         .batch(buffer_size)
-        
-        
-        # .map(lambda x: package_images_captions(x))
     )
 
-    # pipe = pipe.sharding_filter()
-
-    # pipe = LineReader(pipe, return_path=False)
-    # # # use pipe to read from local file
-    # # pipe = LineReader(pipe, return_path=True)
-    # # LineReader downloads raw bytes.  Decode them to strings, then split.
-
-    
-    # pipe = pipe.map(lambda line: line.split("\t"))
+        
 
     return ParallelSampleLoader(datapipe)
     # return datapipe
 
 def conceptual_captions_3m(
-    split: str = "train", buffer_size: int = 256
+    split: str = "train", buffer_size: int = 256, dataset_size=-1
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
-    return _datapipe_from_tsv_url(tsv_url=TSV_URLS[split], buffer_size=buffer_size)
+    return _datapipe_from_tsv_url(tsv_url=TSV_URLS[split], buffer_size=buffer_size, dataset_size=dataset_size)
 
 
 

@@ -14,15 +14,19 @@ import numpy as np
 from tqdm import tqdm
 
 
-batch_size = 2
+batch_size = 128
 
-dataset_processor = ConceptualCaptionsProcessor(batch_size=batch_size)
+dataset_size = 10
+
+dataset_processor = ConceptualCaptionsProcessor(batch_size=batch_size, dataset_size=dataset_size)
 
 baby_git_model = BabyGitModel()
 
 
 
-n_epochs=2
+
+
+n_epochs=10
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 
@@ -36,7 +40,7 @@ def unnormalize_image_for_display(image) -> Image:
 
    
 
-    unnormalized_image = (imgs[0].numpy() * np.array(STD)[:, None, None]) + np.array(MEAN)[:, None, None]
+    unnormalized_image = (image.numpy() * np.array(STD)[:, None, None]) + np.array(MEAN)[:, None, None]
     unnormalized_image = (unnormalized_image * 255).astype(np.uint8)
     unnormalized_image = np.moveaxis(unnormalized_image, 0, -1)
     img = Image.fromarray(unnormalized_image)
@@ -53,17 +57,26 @@ baby_git_model.to(device).train()
 
 for epoch in range(n_epochs):
 
-    for (imgs, captions) in tqdm(dataset_processor.train_dataloader):
+    step = 0
+
+    for (imgs, captions) in dataset_processor.train_dataloader:
 
         if imgs == None:
             # happens when OSError in conceptual captions dataloader
             continue
+
+        print('imgs shape ', imgs.shape)
 
         # imgs are preprocessed, captions are not
 
         tokenized_captions = tokenizer(captions, padding=True, truncation=True, return_tensors="pt").to(device)
 
         imgs = imgs.to(device)
+
+        # display image
+        org_image = unnormalize_image_for_display(imgs[0].cpu())
+
+        org_image.save(f'img_{epoch}.jpg')
 
         
 
@@ -74,9 +87,11 @@ for epoch in range(n_epochs):
 
         loss = model_outputs.loss
 
-        print('loss ', loss)
+        print(f'{step}: loss ', loss)
 
         loss.backward()
 
         optimizer.step()
         optimizer.zero_grad()
+
+        step += 1
