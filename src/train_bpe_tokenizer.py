@@ -98,10 +98,6 @@ tokenizer.save(str(tokenizer_path), pretty=True)
 
 
 
-
-
-
-
 tokenizer = Tokenizer.from_file(str(tokenizer_path))
 text = "hello The quick brown fox jumps over the lazy dog."
 

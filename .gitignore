@@ -12,8 +12,13 @@ cc_3m_training_exists/
 # ignore env folder
 env/
 
-src/datasets/GCC-1.1.0-Validation.tsv
-src/datasets/Train-GCC-training.tsv
-
 src/datasets/__pycache__
 src/models/__pycache__
+
+src/datasets/cc_3m/
+src/datasets/osf/
+src/datasets/zip/
+
+src/datasets/multimodal_train/
+
+

@@ -28,7 +28,7 @@ FORBIDDEN_URLS = [
     'sciencephoto'
 ]
 
-class ConceptualCaptionsProcessor(DatasetProcessorParent):
+class OSFDatasetProcessor(DatasetProcessorParent):
 
     
 
@@ -37,7 +37,6 @@ class ConceptualCaptionsProcessor(DatasetProcessorParent):
         self.train_data_pipe: IterDataPipe = None
         self.val_data_pipe: IterDataPipe = None
 
-        self.train_dataset = None
         self.train_dataset = None
         self.train_dataloader = None
         self.val_dataset = None
