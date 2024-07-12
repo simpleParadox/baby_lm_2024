@@ -35,20 +35,7 @@ def create_open_images_tsv():
 
     tsv_file_path = 'src/datasets/osf/multimodal_data/open_images_train.tsv'
 
-
-    # with open(tsv_file_path, 'a+') as tsv_file:
-
-    #     tsv_file.write('image_url\tfolder\texists\tcaption\n')
-
-
-    # write_batch: str = ""
-
-
-    # gather open images image ids in localized narratives dataset, then store the urls and captions of those images in tsv file 
-
-    # batch_size = 20000
-
-    # i = 0
+    
 
     # with open(tsv_file_path, 'a+') as tsv_file:
     for index, row in tqdm(open_images_caption_df.iterrows()):
@@ -57,7 +44,12 @@ def create_open_images_tsv():
 
         image_url = f"https://s3.amazonaws.com/open-images-dataset/{split}/{row['image_id']}.jpg"
 
-        caption = row['caption']
+        caption: str = row['caption']
+
+        # remove \n and \t from caption
+
+        caption = caption.replace('\n', ' ')
+        caption = caption.replace('\t', ' ')
 
         # generated_row = f"{image_url}\ttraining\t1\t{caption}\n"
 
@@ -75,25 +67,6 @@ def create_open_images_tsv():
 
     new_df.to_csv(tsv_file_path, sep='\t')
 
-
-
-
-            # if i > batch_size:
-            #     # write batch to file
-            #     print('write batch size ', len(write_batch.split('\n')))
-                
-                
-            #     tsv_file.write(write_batch)
-            #     tsv_file.flush()
-
-            #     write_batch = ""
-
-            #     i = 0
-
-            # else:
-            #     write_batch += generated_row
-            #     # print('write batch size ', len(write_batch.split('\n')))
-            #     i += 1
 
 
 
@@ -115,27 +88,22 @@ def create_mscoco_tsv():
 
     tsv_file_path = 'src/datasets/osf/multimodal_data/mscoco_train.tsv'
 
-    write_batch:str = ""
-
-    with open(tsv_file_path, 'a+') as tsv_file:
-
-        tsv_file.write('image_url\tfolder\texists\tcaption\n')
-
-        
 
 
     # gather open images image ids in localized narratives dataset, then store the urls and captions of those images in tsv file 
 
-    batch_size = 50000
-
-    i = 0
     for index, row in tqdm(mscoco_captions_df.iterrows()):
 
         # print(f"{row['image_id']}: {row['caption']}")
 
         image_url = f"http://images.cocodataset.org/{split}/COCO_{split}_{int(row['image_id']):012d}.jpg"
 
-        caption = row['caption']
+        caption: str = row['caption']
+
+        # remove \n and \t from caption
+
+        caption = caption.replace('\n', ' ')
+        caption = caption.replace('\t', ' ')
 
         data['image_url'].append(image_url)
 
@@ -152,8 +120,8 @@ def create_mscoco_tsv():
 
 
 
-# create_open_images_tsv()
-create_mscoco_tsv()
+create_open_images_tsv()
+# create_mscoco_tsv()
 # file_path = 'src/datasets/cc_3m_training_exists_concatenated_with_captions_reduced.tsv'
 
 # new_file = 'src/datasets/cc_3m_training_exists_concatenated_with_captions_reduced_unzip.tsv'
