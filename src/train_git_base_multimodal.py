@@ -24,9 +24,11 @@ dataset_size = -1
 baby_git_model = BabyGitModel(use_dino_embeds=False)
 
 
-n_epochs=500
+n_epochs=2
 
 n_workers = 24
+
+model_save_path = 'src/saved_models/best_model.pt'
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 
@@ -92,14 +94,20 @@ multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size,
 
 
 
+lowest_loss = 9999999
+
+min_save_every = 200
+
+last_saved = -1
+
+step = 0
+
 print("-- training -- ")
 for epoch in range(n_epochs):
 
-    step = 0
-
-    print('stepping')
-
     for preprocessed_images, captions in tqdm(multimodal_dataset_processor.train_dataloader):
+
+        
 
         # print("one step")
 
@@ -125,7 +133,11 @@ for epoch in range(n_epochs):
 
         loss = model_outputs.loss
 
-        print(f'{step}: loss ', loss)
+        print(f'{epoch} (step: {step}): loss ', loss)
+
+        if loss.item() < lowest_loss and step - last_saved > min_save_every:
+            torch.save(baby_git_model.state_dict(), model_save_path)
+            last_saved = step
 
         loss.backward()
 

@@ -272,6 +272,6 @@ class ParallelSampleLoader(IterDataPipe):
 
 
             # for image, caption in zip(images, captions):
-            for image, caption in zip(image_urls, captions):
+            for image, caption in zip(images, captions):
                 if image is not None:
                     yield image, caption

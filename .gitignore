@@ -20,5 +20,5 @@ src/datasets/osf/
 src/datasets/zip/
 
 src/datasets/multimodal_train/
-
+src/saved_models/
 
