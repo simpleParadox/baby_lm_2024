@@ -30,24 +30,13 @@ from transformers import GitForCausalLM
 
 class BabyGitModel(nn.Module):
     
-    def __init__(self, args=None, use_cuda=False, cuda_device=-1, wandb_object=None, manual_seed=22, use_dino_embeds=False):
+    def __init__(self, args=None, use_cuda=False, device=None, wandb_object=None, manual_seed=22, use_dino_embeds=False):
 
         super(BabyGitModel, self).__init__()
         # Initialize the class attributes here
-        torch.manual_seed(22)
-    
-        # random.seed(manual_seed)
-        # np.random.seed(manual_seed)
-        # torch.manual_seed(manual_seed)
-        # # Also setting deterministic behaviour for cudnn.
-        # torch.backends.cudnn.deterministic = True
-        # torch.use_deterministic_algorithms(True)
-        # # torch.set_deterministic(True)
-        # torch.cuda.manual_seed_all(manual_seed)
+
                 
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
-
-
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu") if device == None else device
         # self.processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
 
 

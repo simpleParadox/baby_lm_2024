@@ -33,7 +33,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     
 
-    def __init__(self, cuda_device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3) -> None:
+    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=22) -> None:
 
         self.train_data_pipe: IterDataPipe = None
         self.val_data_pipe: IterDataPipe = None
@@ -47,15 +47,16 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
         self.n_workers = n_workers
 
+        self.manual_seed = manual_seed
+
+        
 
 
-        self.device = torch.device(cuda_device if torch.cuda.is_available() else "cpu")
+
+        self.device = device
 
       
         _, self.image_preprocessor = clip.load('ViT-B/32', device=self.device)
-
-
-
 
 
         # always need to first load train then load val dataset. Fix this confusing requirement later
@@ -124,7 +125,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size)
 
         batch_size = self.batch_size
-        self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(22))
+        self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
 
     def load_val_dataset(self):
 

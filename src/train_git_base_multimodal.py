@@ -14,23 +14,41 @@ from torch.utils.data import DataLoader
 import random
 
 from tqdm import tqdm
+import os
 
 
 batch_size = 32
 
-dataset_size = 10
-
-
-baby_git_model = BabyGitModel(use_dino_embeds=False)
-
+dataset_size = -1 # negative for full dataset
 
 n_epochs=50
 
 n_workers = 24
+device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 
 model_save_path = 'src/saved_models/best_model.pt'
+min_save_every = 200 # saving best model only if last save was > 200 steps ago
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
+manual_seed = 22
+
+
+torch.manual_seed(22)
+
+random.seed(manual_seed)
+np.random.seed(manual_seed)
+torch.manual_seed(manual_seed)
+# Also setting deterministic behaviour for cudnn.
+torch.backends.cudnn.deterministic = True
+torch.use_deterministic_algorithms(True)
+# torch.set_deterministic(True)
+torch.cuda.manual_seed_all(manual_seed)
+os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
+
+baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=manual_seed, device=device)
+
+
+
+
 
 def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     '''
@@ -76,26 +94,15 @@ def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_
 
 
 
-# NEED TO MAKE BABY_GIT INHERIT FROM NN.MODULE
 optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=5e-5)
 
 baby_git_model.to(device).train()
 
-# print('--- CAP before training for "I am a " --- ' )
-
-# captions = ['I am a ']
-
-# evaluate_model(baby_git_model, captions)
+multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers, )
 
 
 
-multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers)
-
-
-
-lowest_loss = 9999999
-
-min_save_every = 200
+lowest_loss = 9999999 
 
 last_saved = -1
 
@@ -109,7 +116,7 @@ for epoch in range(n_epochs):
 
     for preprocessed_images, captions in tqdm(multimodal_dataset_processor.train_dataloader):
 
-        if test_images == None:
+        if test_images == None: # choosing first batch as test data
             test_images = preprocessed_images
             test_captions = captions
 
