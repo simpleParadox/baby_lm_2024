@@ -124,7 +124,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size)
 
         batch_size = self.batch_size
-        self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(22))
+        self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(22))
 
     def load_val_dataset(self):
 

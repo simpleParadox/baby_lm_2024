@@ -18,13 +18,13 @@ from tqdm import tqdm
 
 batch_size = 32
 
-dataset_size = -1
+dataset_size = 10
 
 
 baby_git_model = BabyGitModel(use_dino_embeds=False)
 
 
-n_epochs=2
+n_epochs=50
 
 n_workers = 24
 
@@ -50,27 +50,26 @@ def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     return img
 
 
-def evaluate_model(model: BabyGitModel, dino_embeds: torch.Tensor, test_captions: list[str]):
+def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
 
 
     tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device)
 
     
+
+    img = unnormalize_image_for_display(preprocessed_images[0])
+
+    img.save(f'test_image_eval.jpg')
+
+    preprocessed_images = preprocessed_images.to(device)
+
+    
     model.eval()
 
-    # take only first image
-    dino_embeds = dino_embeds[0].unsqueeze(0) # shape: (1, 768)
-
-    dino_embeds = dino_embeds.unsqueeze(0).unsqueeze(0).to(device) # shape: (1, 1, batch_size, 768)
-
     # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
-    generated_ids = model.model.generate(pixel_values=dino_embeds, max_length=50) 
+    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=50) 
 
     generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-
-
-
     print('generated caption: ', generated_caption)
 
     print('true caption ', test_captions[0])
@@ -102,30 +101,33 @@ last_saved = -1
 
 step = 0
 
+test_images = None
+test_captions = None
+
 print("-- training -- ")
 for epoch in range(n_epochs):
 
     for preprocessed_images, captions in tqdm(multimodal_dataset_processor.train_dataloader):
 
-        
-
-        # print("one step")
+        if test_images == None:
+            test_images = preprocessed_images
+            test_captions = captions
 
         # print('captions ', captions)
-        tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt").to(device)
+        tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device)
 
         input_ids = tokenized_captions['input_ids'].to(device)
         attention_mask = tokenized_captions['attention_mask'].to(device)
         
 
-        # print('caps[0] ', captions[0])
+        # print(f'caps ({step}): ', captions[0])
 
         # print("preprocessed_image[0] shape ", preprocessed_images[0].shape)
 
 
         # image = unnormalize_image_for_display(preprocessed_images[0])
 
-        # image.save('test_image.jpg')
+        # image.save(f'test_image_{step}.jpg')
 
         preprocessed_images = preprocessed_images.to(device)
 
@@ -133,7 +135,7 @@ for epoch in range(n_epochs):
 
         loss = model_outputs.loss
 
-        print(f'{epoch} (step: {step}): loss ', loss)
+        print(f'epoch: {epoch} (step: {step}): loss ', loss)
 
         if loss.item() < lowest_loss and step - last_saved > min_save_every:
             torch.save(baby_git_model.state_dict(), model_save_path)
@@ -145,4 +147,17 @@ for epoch in range(n_epochs):
         optimizer.zero_grad()
 
         step += 1
+
+
+
+print('-- EVALUATING GIT MODEL --- ')
+
+
+baby_git_model.eval()
+
+evaluate_model(model=baby_git_model, preprocessed_images=test_images, test_captions=test_captions)
+
+
+
+
 
