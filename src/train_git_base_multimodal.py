@@ -31,6 +31,8 @@ min_save_every = 200 # saving best model only if last save was > 200 steps ago
 
 manual_seed = 22
 
+lr = 5e-5
+
 
 torch.manual_seed(22)
 
@@ -94,7 +96,7 @@ def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_
 
 
 
-optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=5e-5)
+optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
 
 baby_git_model.to(device).train()
 
