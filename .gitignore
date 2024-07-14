@@ -9,4 +9,44 @@ caption_data/
 
 cc_3m_training_exists/
 
+<<<<<<< HEAD
 datasets/
+=======
+# ignore env folder
+env/
+
+src/datasets/__pycache__
+src/models/__pycache__
+
+src/datasets/cc_3m/
+src/datasets/osf/
+src/datasets/zip/
+
+src/datasets/multimodal_train/
+src/saved_models/
+
+test/evaluation-pipeline-2024-main/env
+test/evaluation-pipeline-2024-main/*.pyc
+test/evaluation-pipeline-2024-main/output/
+test/evaluation-pipeline-2024-main/data/
+test/evaluation-pipeline-2024-main/lm_cache
+test/evaluation-pipeline-2024-main/.idea
+test/evaluation-pipeline-2024-main/build
+test/evaluation-pipeline-2024-main/dist
+test/evaluation-pipeline-2024-main/*.egg-info
+test/evaluation-pipeline-2024-main/venv
+test/evaluation-pipeline-2024-main/.vscode/
+test/evaluation-pipeline-2024-main/temp
+test/evaluation-pipeline-2024-main/__pycache__
+test/evaluation-pipeline-2024-main/.ipynb_checkpoints
+test/evaluation-pipeline-2024-main/temp
+# IPython
+test/evaluation-pipeline-2024-main/profile_default/
+test/evaluation-pipeline-2024-main/ipython_config.py
+# don't track (the default location of) the cached requests
+test/evaluation-pipeline-2024-main/lm_eval/caching/.cache
+# don't track files created by wandb
+test/evaluation-pipeline-2024-main/wandb
+test/evaluation-pipeline-2024-main/examples/wandb
+test/evaluation-pipeline-2024-main/evaluation_data/
+>>>>>>> abrar-git-base

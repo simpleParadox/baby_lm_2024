@@ -1,0 +1,44 @@
+batch  [['7028', 'http://images.cocodataset.org/train2014/COCO_train2014_000000405222.jpg', 'training', '1', 'In this image i can see six persons sitting on a horse and going, the person at right holding a flag, at the back ground i can see few trees.', 'mscoco'], 
+        ['7579', 'http://images.cocodataset.org/train2014/COCO_train2014_000000166896.jpg', 'training', '1', 'In this picture we observe a railway track on which there is a green train in which a guy is riding it and we observe coal behind him and in the background there are trees and we observe a wooden fence on the both the sides of the train.', 'mscoco'], 
+        ['13763', 'http://images.cocodataset.org/train2014/COCO_train2014_000000205283.jpg', 'training', '1', "In this image there is a boy standing and holding a teddy bear and a backpack ,another person's standing near him ,and in the back ground there is grass, school bus on the road , trees, sky.", 'mscoco'], 
+        ['In the top there is a wooden wall."', 'mscoco'], 
+        ['8362', 'http://images.cocodataset.org/train2014/COCO_train2014_000000294775.jpg', 'training', '1', "In this picture there is a table, on the table plate, platter, jug, bottles, bowl,packet, forks and leafy vegetables. On the left there is a person's hand holding some food.", 'mscoco'], 
+        ['17091', 'http://images.cocodataset.org/train2014COCO_train2014_000000174099.jpg', 'training', '1', 'In this image, in the middle there is a plate on that there is a love symbol chocolate cake on that there isknife and love symbol small item. In the background there is floor and wall.', 'mscoco'], 
+        ['9267', 'http://images.cocodataset.org/train2014/COCO_train2014_000000045490jpg', 'training', '1', 'In this picture we can see 2 ducks and ducklings standing on the grass in front ofthe river water.', 'mscoco'],
+        ['10225','http://images.cocodataset.org/train2014/COCO_train2014_000000112849.jpg', 'training', '1', 'In this picture we can see the there is a truck and it is of yellow in colour and there is a logo in front of it also there is a light on the top of it, there is a door, in the backdrop we can see there are vehicles and on the right we can see there is a cardboard, table and some objects kept on and in the background of some people standing and there are lights attached to the ceiling and there is a banner', 'mscoco']]   
+
+
+
+
+
+
+batch  [['7028', 'http://images.cocodataset.org/train2014/COCO_train2014_000000405222.jpg', 'training', '1', 'In this image i can see six persons sitting on a horse and going, the person at right holding a flag, at the  back ground i can see few trees.', 'mscoco'], 
+        ['7579', 'http://images.cocodataset.org/train2014/COCO_train2014_000000166896.jpg', 'training', '1', 'In this picture we observe a railway track on which there is a green tr ain in which a guy is riding it and we observe coal behind him and in the background there are trees and we observe a wooden fence on the both the sides of the train.', 'mscoco'], 
+        ['13763', 'http://images.cocodataset.org/train2014/COCO_train2014_000000205283.jpg', 'training', '1', "In this image there is a boy standing and holding a teddy bear and a backpack ,another person's standing near him ,and in the back ground there is grass, s chool bus on the road , trees, sky.", 'mscoco'], 
+        ['In the top there is a wooden wall.', 'mscoco'], 
+        ['8362', 'http://images.cocodataset.org/train2014/COCO_train2014_000000294775.jpg', 'training', '1', "In this picture there is a table, on the table plate, platter, jug, bottles, bowl, packet, forks and leafy vegetables. On the left there is a person's hand holding some food.", 'mscoco'], 
+        ['17091', 'http://images.cocodataset.org/train2014 COCO_train2014_000000174099.jpg', 'training', '1', 'In this image, in the middle there is a plate on that there is a love symbol chocolate cake on that there is knife and love symbol small item. In the background there is floor and wall.', 'mscoco'], 
+        ['9267', 'http://imagescocodataset.org/train2014/COCO_train2014_000000045490.jpg', 'training', '1', 'In this picture we can see 2 ducks and ducklings standing on the grass in front of the river water.', 'mscoco'], 
+        ['10225', 'http://images.cocodataset.org/train2014/COCO_train2014_000000112849.jpg', 'training', '1', 'In this picture we can see the there is a truck and it is of yellow in colour and there is a logo in front of it also there is a light on the top of it, there is a door, in the backdrop we can see there are vehicles and on the right we can see there is a cardboard, table and some objects kept on and in the background of some people standing and there are lights attached to the ceiling and there is a banner', 'mscoco']]        
+
+
+
+
+
+
+
+atch  [['7028', 'http://images.cocodataset.org/train2014/COCO_train2014_000000405222.jpg', 'training', '1', 'In this image i can see six persons sitting on a horse and going, the person at right holding a flag, at the back ground i can see few trees.', 'mscoco'], 
+['7579', 'http://images.cocodataset.org/train2014/COCO_train2014_000000166896.jpg', 'training', '1', 'In this picture we observe a railway track on which there is a green train in which a guy is riding it and we observe coal behind him and in the background there are trees and we observe a wooden fence on the both the sides of the train.', 'mscoco'], 
+['13763', 'http://images.cocodataset.org/train2014/COCO_train2014_000000205283.jpg', 'training', '1', "In this image there is a boy standing and holding a teddy bear and a backpack ,another person's standing near him ,and in the back ground there is grass, school bus on the road , trees, sky.", 'mscoco'], 
+['In the top there is a wooden wall."', 'mscoco'], 
+['8362', 'http://images.cocodataset.org/train2014/COCO_train2014_000000294775.jpg', 'training', '1', "In this picture there is a table, on the table plate, platter, jug, bottles, bowl, packet, forks and leafy vegetables. On the left there is a person's hand holding some food.", 'mscoco'], 
+['17091', 'http://images.cocodataset.org/train2014/COCO_train2014_000000174099.jpg', 'training', '1', 'In this image, in the middle there is a plate on that there is a love symbol chocolate cake on that there is knife and love symbol small item. In the background there is floor and wall.', 'mscoco'], 
+['9267', 'http://images.cocodataset.org/train2014/COCO_train2014_000000045490.jpg', 'training', '1', 'In this picture we can see 2 ducks and ducklings standing on the grass in front of the river water.', 'mscoco'], 
+['10225', 'http://images.cocodataset.org/train2014/COCO_train2014_000000112849.jpg', 'training', '1', 'In this picture we can see the there is a truck and it is of yellow in colour and there is a logo in front of it also there is a light on the top of it, there is a door, in the backdrop we can see there are vehicles and on the right we can see there is a cardboard, table and some objects kept on and in the background of some people standing and there are lights attached to the ceiling and there is a banner', 'mscoco']]
+
+
+
+
+batch  [['110334', 'https://s3.amazonaws.com/open-images-dataset/train/26ee3f84cc14bf6f.jpg', 'training', '1', 'This image consists of a poster pasted on the board. At the bottom, there is road. In the background, there are trees.', 'open_images'], ['114306', 'https://s3.amazonaws.com/open-images-dataset/train/f8e38cba92bf175e.jpg', 'training', '1', 'In this picture we can see a poster, in this poster we can see a person, candles and text.', 'open_images'], 
+['111615', 'https://s3.amazonaws.com/open-images-dataset/train/a3ba7209a9f16936.jpg', 'training', '1', 'In this image we can see bathtub, tap on the wall and floor.', 'open_images'], 
+['."', 'open_images'], ['110390', 'https://s3.amazonaws.com/open-images-dataset/train/3b446d92f0ccef45.jpg', 'training', '1', 'In this image i can see a couch, at the background i can see, a dining table, a flower pot on a table, a door and a wall.', 'open_images'], ['93501', 'https://s3.amazonaws.com/open-images-dataset/train/b39c77ad18e96f6a.jpg', 'training', '1', 'In the image there is a car on the road. On both sides of the image there is fencing. In the background there are trees. At the top of the image there is sky. In the bottom right corner of the image there is text.', 'open_images'], ['106434', 'https://s3.amazonaws.com/open-images-dataset/train/0b665dc913800817.jpg', 'training', '1', 'In this image there is a person scuba diving in the water.', 'open_images'], ['88289', 'https://s3.amazonaws.com/open-images-dataset/train/50a16fc9fd40a6f4.jpg', 'training', '1', 'This picture describes about group of people, on the left side of the image we can see a woman, she wore a bag, in the background we can see few flags, lights, hoarding and few things on the tables, and also we can see few metal rods.', 'open_images']]
