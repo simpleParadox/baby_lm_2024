@@ -13,7 +13,7 @@ cc_3m_training_exists_filtered = cc_3m_training_exists[cc_3m_training_exists['ex
 
 
 
-# Randomly drop 10% of the rows.
+# Randomly drop 8% of the rows.
 cc_3m_training_exists_filtered = cc_3m_training_exists_filtered.sample(frac=0.92, random_state=42)
 
 # Print the number of rows.
