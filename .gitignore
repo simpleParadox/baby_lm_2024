@@ -5,13 +5,11 @@ data/
 
 # Do not upload evaluation pipeline.
 evaluation-pipeline-2024/
+test/evaluation-pipeline-2024-main/
 caption_data/
-
+datasets/
 cc_3m_training_exists/
 
-<<<<<<< HEAD
-datasets/
-=======
 # ignore env folder
 env/
 
@@ -49,4 +47,3 @@ test/evaluation-pipeline-2024-main/lm_eval/caching/.cache
 test/evaluation-pipeline-2024-main/wandb
 test/evaluation-pipeline-2024-main/examples/wandb
 test/evaluation-pipeline-2024-main/evaluation_data/
->>>>>>> abrar-git-base
