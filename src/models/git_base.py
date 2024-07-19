@@ -12,8 +12,6 @@ from typing import List, Optional, Tuple, Union
 
 from transformers.modeling_outputs import BaseModelOutput
 
-from transformers.modeling_outputs import SequenceClassifierOutputWithPast
-
 
 
 import sys

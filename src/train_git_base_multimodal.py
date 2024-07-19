@@ -31,14 +31,14 @@ import argparse  # This is necessary for wandb sweeps.
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--dataset_size', type=int, default=-1)
-parser.add_argument('--n_epochs', type=int, default=50)
-parser.add_argument('--n_workers', type=int, default=24)
-parser.add_argument('--min_save_every', type=int, default=200)
-parser.add_argument('--seed', type=int, default=22)
-parser.add_argument('--lr', type=float, default=5e-5)
-parser.add_argument('--optimizer', help="adamw or adam", type=str, default='adam')
+parser.add_argument('--batch_size', type=int, required=False, default=32)
+parser.add_argument('--dataset_size', type=int, required=False, default=-1)
+parser.add_argument('--n_epochs', type=int, required=False, default=50)
+parser.add_argument('--n_workers', type=int, required=False, default=24)
+parser.add_argument('--min_save_every', type=int, required=False, default=200)
+parser.add_argument('--seed', type=int, required=False, default=22)
+parser.add_argument('--lr', type=float, required=False, default=5e-5)
+parser.add_argument('--optimizer', help="adamw or adam", type=str, required=False, default='adamw')
 parser.add_argument('--do_curriculum', type=bool, default=False)  # If this is False, then do standard fine-tuning.
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
 
@@ -133,12 +133,18 @@ def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_
 
 print("-- initializing -- ")
 print("Loading optimizer")
-optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
+optimizer = None
+if args.optimizer == 'adamw':
+    optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
+elif args.optimizer == 'adam':
+    optimizer = torch.optim.Adam(baby_git_model.parameters(), lr=lr)
+
+
 baby_git_model.to(device).train()
 print("Loading dataset processor")
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers)
 
-lowest_loss = 9999999
+best_loss = np.inf
 last_saved = -1
 step = 0  # Global step.
 test_images = None
@@ -148,9 +154,12 @@ test_captions = None
 
 # TODO: As of now, no early stopping is implemented. Implement it if needed.
 print("-- training -- ")
-for epoch in range(n_epochs):
+
+epoch_iterator = tqdm(range(n_epochs))
+for epoch in epoch_iterator:
     epoch_loss = 0
-    for preprocessed_images, captions in tqdm(multimodal_dataset_processor.train_dataloader):
+    batch_iterator = tqdm(multimodal_dataset_processor.train_dataloader, disable=False, desc=f'epoch: {epoch}')
+    for preprocessed_images, captions in batch_iterator:
         if test_images == None: # choosing first batch as test data
             test_images = preprocessed_images
             test_captions = captions
@@ -165,24 +174,33 @@ for epoch in range(n_epochs):
         preprocessed_images = preprocessed_images.to(device)
         model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
         loss = model_outputs.loss
+        
         epoch_loss += loss.item()
-        print(f'epoch: {epoch} (step: {step}): loss ', loss)
-        if loss.item() < lowest_loss and step - last_saved > min_save_every:
-            if not os.path.exists(model_save_path):
-                os.makedirs(model_save_path)
-            torch.save(baby_git_model.state_dict(), model_save_path)
-            last_saved = step
+
+        # print(f'epoch: {epoch} (step: {step}): loss ', loss)
+
+        batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()},')
+        batch_iterator.update(1)
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         step += 1
-
         # Log the loss every 50 steps.
         if step % 50 == 0:
             wandb.log({'step': step, 'loss': loss.item()})
+
+    epoch_loss /= len(multimodal_dataset_processor.train_dataloader)
+
+    if epoch_loss < best_loss and step - last_saved > min_save_every:
+        if not os.path.exists(model_save_path):
+            os.makedirs(model_save_path)
+        torch.save(baby_git_model.state_dict(), model_save_path)
+        last_saved = step
+        best_loss = epoch_loss
+
     
     # Print average loss at the end of the epoch.
-    print(f'epoch: {epoch} avg loss: {epoch_loss / len(multimodal_dataset_processor.train_dataloader)}')
+    epoch_iterator.set_description(f'epoch: {epoch} avg loss: {epoch_loss / len(multimodal_dataset_processor.train_dataloader)}')
     # Log the average loss.
     wandb.log({'epoch': epoch, 'avg_loss': epoch_loss / len(multimodal_dataset_processor.train_dataloader)})
 
