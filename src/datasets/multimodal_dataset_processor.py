@@ -2,7 +2,9 @@ import clip
 import torch
 import random
 from torch.utils.data import DataLoader, Subset
-from datasets.dataset_processor_parent import DatasetProcessorParent
+import sys
+sys.path.append('/home/rsaha/projects/babylm/src/datasets')
+from dataset_processor_parent import DatasetProcessorParent
 import numpy as np
 
 import torchdata.datapipes as dp

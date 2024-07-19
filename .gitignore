@@ -47,3 +47,8 @@ test/evaluation-pipeline-2024-main/lm_eval/caching/.cache
 test/evaluation-pipeline-2024-main/wandb
 test/evaluation-pipeline-2024-main/examples/wandb
 test/evaluation-pipeline-2024-main/evaluation_data/
+
+
+
+BabyBERTa/
+git-2024/

@@ -2,11 +2,30 @@ import torch
 import numpy as np
 import random
 from transformers import get_linear_schedule_with_warmup
-from transformers import AutoProcessor, AutoModelForCausalLM, AutoConfig
+from transformers import AutoProcessor, AutoModelForCausalLM, AutoConfig, AutoModelForMaskedLM
+
+from transformers.models.roberta import RobertaForMaskedLM
+from transformers import AutoTokenizer
 
 
 import tqdm
 
+
+
+class BabyBERTaModel:
+    """
+    Implement the BabyBERTaModel from https://aclanthology.org/2021.conll-1.49/
+    """
+
+    def __init__(self, load_pretrained) -> None:
+        # Load the BabyBERTa model configuration here.
+        # Load model directly
+
+        tokenizer = AutoTokenizer.from_pretrained("phueb/BabyBERTa-1", add_prefix_space=True)
+        model = AutoModelForMaskedLM.from_pretrained("phueb/BabyBERTa-1")
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model.to(self.device)
 
 
 class BabyModel:

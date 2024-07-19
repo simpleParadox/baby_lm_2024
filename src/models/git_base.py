@@ -3,8 +3,9 @@ import torch
 import random
 import numpy as np
 from transformers.modeling_outputs import CausalLMOutputWithPast
-
+from transformers import ViTFeatureExtractor, ViTModel, ViTConfig
 from torch import nn
+import transformers.models.git.modeling_git as modeling_git
 
 from tokenizers import Tokenizer
 from typing import List, Optional, Tuple, Union
@@ -12,7 +13,17 @@ from typing import List, Optional, Tuple, Union
 from transformers.modeling_outputs import BaseModelOutput
 
 from transformers import GitForCausalLM
+from transformers.modeling_outputs import SequenceClassifierOutputWithPast
 
+
+
+import sys
+sys.path.append("../../git-2024")
+
+
+
+
+from modeling_git import GitForCausalLM, GitForSequenceClassification
 
 
 # processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
@@ -30,13 +41,40 @@ from transformers import GitForCausalLM
 
 class BabyGitModel(nn.Module):
     
-    def __init__(self, args=None, use_cuda=False, device=None, wandb_object=None, manual_seed=22, use_dino_embeds=False):
+    # def __init__(self, args=None, use_cuda=False, device=None, wandb_object=None, manual_seed=22, use_dino_embeds=False):
+    def __init__(self,
+        vision_config=None,
+        vocab_size=32778,
+        hidden_size=768,
+        num_hidden_layers=6,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=1024,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        pad_token_id=0,
+        position_embedding_type="absolute",
+        use_cache=True,
+        tie_word_embeddings=True,
+        bos_token_id=101,
+        eos_token_id=102,
+        num_image_with_embedding=None,
+        wandb_object=None,
+        manual_seed=42,
+        device=None,
+        use_dino_embeds=False,
+        baseline_git_causal_lm=False,
+        baseline_git_sequence_classification=False,
+        **kwargs):
 
         super(BabyGitModel, self).__init__()
         # Initialize the class attributes here
 
                 
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu") if device == None else device
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu") if device == 'cuda' else 'cpu'
         # self.processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
 
 
@@ -56,23 +94,35 @@ class BabyGitModel(nn.Module):
                 'eos_token': '</s>'
              }
             )
-        # GIT needs predefined pad token
+        
 
+
+        # GIT needs predefined pad token
         self.processor = GitProcessor(self.clip_image_processor, self.tokenizer)
 
 
         # self.model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")
 
-        print('-- INITING MODEL FROM SCRATCH -- ')
+        print('-- INITIATING MODEL FROM SCRATCH -- ')
 
         git_config = GitConfig()
+        
 
-        self.model: GitForCausalLM = AutoModelForCausalLM.from_config(git_config)
+        if baseline_git_causal_lm and not baseline_git_sequence_classification:
+            self.model = GitForCausalLM(git_config)
+        elif not baseline_git_causal_lm and baseline_git_sequence_classification:
+            self.model = GitForSequenceClassification(git_config)
+        else:
+            raise ValueError("Please specify either baseline_git_causal_lm or baseline_git_sequence_classification as True (but not both)")
 
         if use_dino_embeds:
-            self.model.git.image_encoder = IdentityVisionModel()
-
+            self.model.git.image_encoder = IdentityVisionModel() # Change made by Rohan. Replaced it to the ViTModel.from_pretrained('facebook/dino-vitb16')
             self.model.git.encoder.layer[0].attention.self.image_patch_tokens = 1
+        else:
+            print("Using pretrained dino-vitb16 image encoder.")
+            self.model.git_image_encoder = ViTModel.from_pretrained('facebook/dino-vitb16')
+            
+
 
         
         

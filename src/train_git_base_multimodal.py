@@ -1,7 +1,11 @@
+import sys
+sys.path.append('../git-2024') # NOTE: Might need to change this according to the user but usually it should be fine.
+sys.path.append('../src/datasets')
+sys.path.append('/home/rsaha/projects/babylm/src/datasets')
+sys.path.append('/home/rsaha/projects/babylm/git-2024')
 import torch
 
-from datasets.multimodal_dataset_processor import MultiModalDatasetProcessor
-
+from multimodal_dataset_processor import MultiModalDatasetProcessor
 
 from models.git_base import BabyGitModel
 
@@ -15,6 +19,11 @@ import random
 
 from tqdm import tqdm
 import os
+
+import wandb
+
+from modeling_git import GitForCausalLM as BaselineGitForCausalLM # Make sure git-2024 is clone 'inside' the root directory of the project.
+from modeling_git import GitForSequenceClassification as BaselineGitForSequenceClassification
 
 
 batch_size = 32
@@ -46,9 +55,15 @@ torch.use_deterministic_algorithms(True)
 torch.cuda.manual_seed_all(manual_seed)
 os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
 
-baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=manual_seed, device=device)
+baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=manual_seed, device=device, 
+                              baseline_git_causal_lm=True, 
+                              baseline_git_sequence_classification=False)
 
 
+# baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=manual_seed, device=device) # TODO: Verify if the output from this model and the provided baseline model are the same. Seeds could be an issue.
+
+# baseline_git_for_causal_lm = BaselineGitForCausalLM()
+# baseline_git_for_sequence_classification = BaselineGitForSequenceClassification()
 
 
 
@@ -100,7 +115,7 @@ optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
 
 baby_git_model.to(device).train()
 
-multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers, )
+multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers)
 
 
 
@@ -123,7 +138,7 @@ for epoch in range(n_epochs):
             test_captions = captions
 
         # print('captions ', captions)
-        tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device)
+        tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device) # TODO: Check if max length is alright.
 
         input_ids = tokenized_captions['input_ids'].to(device)
         attention_mask = tokenized_captions['attention_mask'].to(device)
@@ -147,6 +162,8 @@ for epoch in range(n_epochs):
         print(f'epoch: {epoch} (step: {step}): loss ', loss)
 
         if loss.item() < lowest_loss and step - last_saved > min_save_every:
+            if not os.path.exists('src/saved_models'):
+                os.makedirs('src/saved_models')
             torch.save(baby_git_model.state_dict(), model_save_path)
             last_saved = step
 
