@@ -16,7 +16,7 @@ from torch import Tensor
 
 from torch.utils.data import DataLoader
 import random
-
+import datetime
 from tqdm import tqdm
 import os
 
@@ -51,34 +51,48 @@ n_epochs=args.n_epochs
 n_workers = args.n_workers
 device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 min_save_every = args.min_save_every # saving best model only if last save was > 200 steps ago
-manual_seed = args.manual_seed
+seed = args.seed
 lr = args.lr
 
 
+if args.model_type == 'causal_lm':
+    baseline_git_casual_lm = True
+    baseline_git_sequence_classification = False
+elif args.model_type == 'sequence':
+    baseline_git_casual_lm = False
+    baseline_git_sequence_classification = True
+else:
+    raise ValueError('model_type should be either causal_lm or sequence.')
 
 # Initialize wandb.
 wandb.init(project='babylm_2024')
-
 
 # Create dict from args.
 args_dict = vars(args)
 wandb.log(args_dict)
 
 
-model_save_path = 'src/saved_models/best_model.pt'
+# Set the output directory with a timestamp.
+timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+random_dir = np.random.randint(0, 100000)
+
+root_level_path = '../'
+model_save_path = root_level_path + 'saved_models/'
+
+if args.do_curriculum:
+    model_save_path += f'standard/{args.model_type}/seed_{seed}/'
+else:
+    model_save_path += f'curriculum/{args.model_type}/seed_{seed}/'
+
+
+model_save_path += f'{timestamp}_{random_dir}/'
+
+
 # Previously there were the seeds and the deterministic settings here. Now they are in the modeling_git.py file.
 
-baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=manual_seed, device=device, 
-                              baseline_git_causal_lm=True, 
-                              baseline_git_sequence_classification=False)
-
-
-# baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=manual_seed, device=device) # TODO: Verify if the output from this model and the provided baseline model are the same. Seeds could be an issue.
-
-# baseline_git_for_causal_lm = BaselineGitForCausalLM()
-# baseline_git_for_sequence_classification = BaselineGitForSequenceClassification()
-
-
+baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=device, 
+                              baseline_git_causal_lm=baseline_git_casual_lm, 
+                              baseline_git_sequence_classification=baseline_git_sequence_classification)
 
 def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     '''
@@ -102,101 +116,62 @@ def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_
 
 
     tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device)
-
-    
-
     img = unnormalize_image_for_display(preprocessed_images[0])
-
     img.save(f'test_image_eval.jpg')
-
     preprocessed_images = preprocessed_images.to(device)
 
     
     model.eval()
-
     # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
     generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=50) 
-
     generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
     print('generated caption: ', generated_caption)
-
     print('true caption ', test_captions[0])
 
 
 
 optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
-
 baby_git_model.to(device).train()
-
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers)
 
-
-
-lowest_loss = 9999999 
+lowest_loss = 9999999
 
 last_saved = -1
 
-step = 0
+step = 0  # Global step.
 
 test_images = None
 test_captions = None
 
 print("-- training -- ")
 for epoch in range(n_epochs):
-
     for preprocessed_images, captions in tqdm(multimodal_dataset_processor.train_dataloader):
-
         if test_images == None: # choosing first batch as test data
             test_images = preprocessed_images
             test_captions = captions
-
         # print('captions ', captions)
         tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device) # TODO: Check if max length is alright.
-
         input_ids = tokenized_captions['input_ids'].to(device)
         attention_mask = tokenized_captions['attention_mask'].to(device)
-        
-
         # print(f'caps ({step}): ', captions[0])
-
         # print("preprocessed_image[0] shape ", preprocessed_images[0].shape)
-
-
         # image = unnormalize_image_for_display(preprocessed_images[0])
-
         # image.save(f'test_image_{step}.jpg')
-
         preprocessed_images = preprocessed_images.to(device)
-
         model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-
         loss = model_outputs.loss
-
         print(f'epoch: {epoch} (step: {step}): loss ', loss)
-
         if loss.item() < lowest_loss and step - last_saved > min_save_every:
-            if not os.path.exists('src/saved_models'):
-                os.makedirs('src/saved_models')
+            if not os.path.exists(model_save_path):
+                os.makedirs(model_save_path)
             torch.save(baby_git_model.state_dict(), model_save_path)
             last_saved = step
-
         loss.backward()
-
         optimizer.step()
         optimizer.zero_grad()
-
         step += 1
 
 
-
 print('-- EVALUATING GIT MODEL --- ')
-
-
 baby_git_model.eval()
-
 evaluate_model(model=baby_git_model, preprocessed_images=test_images, test_captions=test_captions)
-
-
-
-
-
