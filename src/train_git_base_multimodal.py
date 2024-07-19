@@ -26,34 +26,44 @@ from modeling_git import GitForCausalLM as BaselineGitForCausalLM # Make sure gi
 from modeling_git import GitForSequenceClassification as BaselineGitForSequenceClassification
 
 
-batch_size = 32
+import argparse  # This is necessary for wandb sweeps.
 
-dataset_size = -1 # negative for full dataset
 
-n_epochs=50
 
-n_workers = 24
+parser = argparse.ArgumentParser()
+parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--dataset_size', type=int, default=-1)
+parser.add_argument('--n_epochs', type=int, default=50)
+parser.add_argument('--n_workers', type=int, default=24)
+parser.add_argument('--min_save_every', type=int, default=200)
+parser.add_argument('--manual_seed', type=int, default=22)
+parser.add_argument('--lr', type=float, default=5e-5)
+parser.add_argument('--baseline', type=bool, default=True)
+parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
+args = parser.parse_args()
+
+batch_size = args.batch_size
+dataset_size = args.dataset_size # negative for full dataset
+n_epochs=args.n_epochs
+n_workers = args.n_workers
 device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
+min_save_every = args.min_save_every # saving best model only if last save was > 200 steps ago
+manual_seed = args.manual_seed
+lr = args.lr
+
+
+
+# Initialize wandb.
+wandb.init(project='babylm_2024')
+
+
+# Create dict from args.
+args_dict = vars(args)
+wandb.log(args_dict)
+
 
 model_save_path = 'src/saved_models/best_model.pt'
-min_save_every = 200 # saving best model only if last save was > 200 steps ago
-
-manual_seed = 22
-
-lr = 5e-5
-
-
-torch.manual_seed(22)
-
-random.seed(manual_seed)
-np.random.seed(manual_seed)
-torch.manual_seed(manual_seed)
-# Also setting deterministic behaviour for cudnn.
-torch.backends.cudnn.deterministic = True
-torch.use_deterministic_algorithms(True)
-# torch.set_deterministic(True)
-torch.cuda.manual_seed_all(manual_seed)
-os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
+# Previously there were the seeds and the deterministic settings here. Now they are in the modeling_git.py file.
 
 baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=manual_seed, device=device, 
                               baseline_git_causal_lm=True, 

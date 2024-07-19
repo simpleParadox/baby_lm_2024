@@ -12,7 +12,6 @@ from typing import List, Optional, Tuple, Union
 
 from transformers.modeling_outputs import BaseModelOutput
 
-from transformers import GitForCausalLM
 from transformers.modeling_outputs import SequenceClassifierOutputWithPast
 
 
@@ -43,25 +42,6 @@ class BabyGitModel(nn.Module):
     
     # def __init__(self, args=None, use_cuda=False, device=None, wandb_object=None, manual_seed=22, use_dino_embeds=False):
     def __init__(self,
-        vision_config=None,
-        vocab_size=32778,
-        hidden_size=768,
-        num_hidden_layers=6,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=1024,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        position_embedding_type="absolute",
-        use_cache=True,
-        tie_word_embeddings=True,
-        bos_token_id=101,
-        eos_token_id=102,
-        num_image_with_embedding=None,
         wandb_object=None,
         manual_seed=42,
         device=None,
@@ -106,6 +86,9 @@ class BabyGitModel(nn.Module):
         print('-- INITIATING MODEL FROM SCRATCH -- ')
 
         git_config = GitConfig()
+
+        # Set the manual seed that will be later used to set the determinism in the modeling_git.py file.
+        git_config.manual_seed = manual_seed
         
 
         if baseline_git_causal_lm and not baseline_git_sequence_classification:
