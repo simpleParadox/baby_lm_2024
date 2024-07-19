@@ -36,10 +36,13 @@ parser.add_argument('--dataset_size', type=int, default=-1)
 parser.add_argument('--n_epochs', type=int, default=50)
 parser.add_argument('--n_workers', type=int, default=24)
 parser.add_argument('--min_save_every', type=int, default=200)
-parser.add_argument('--manual_seed', type=int, default=22)
+parser.add_argument('--seed', type=int, default=22)
 parser.add_argument('--lr', type=float, default=5e-5)
-parser.add_argument('--baseline', type=bool, default=True)
+parser.add_argument('--optimizer', help="adamw or adam", type=str, default='adam')
+parser.add_argument('--do_curriculum', type=bool, default=False)  # If this is False, then do standard fine-tuning.
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
+
+
 args = parser.parse_args()
 
 batch_size = args.batch_size

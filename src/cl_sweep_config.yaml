@@ -1,0 +1,27 @@
+program: train_git_base_multimodal.py
+name: baseline
+method: grid
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  lr:
+    values: [1e-5]
+  batch_size:
+    values: [32]
+  n_epochs:
+    values: [50]
+  min_save_every:
+    values: [200]
+  n_workers:
+    values: [24]
+  optimizer:
+    values: ["adam"]
+  dataset_size:
+    values: [-1]
+  seed:
+    values: [0, 1, 2, 3, 4]
+  do_curriculum:
+    values: [True]  # This is True for curriculum learning.
+  model_type:
+    values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
