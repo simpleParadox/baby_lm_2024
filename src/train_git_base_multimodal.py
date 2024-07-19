@@ -69,7 +69,9 @@ wandb.init(project='babylm_2024')
 
 # Create dict from args.
 args_dict = vars(args)
-wandb.log(args_dict)
+wandb.log(args_dict) # Log the args.
+
+
 
 
 # Set the output directory with a timestamp.
@@ -87,6 +89,9 @@ else:
 
 model_save_path += f'{timestamp}_{random_dir}/'
 
+print(f'model_save_path: {model_save_path}')
+wandb.log({'model_save_path': model_save_path})
+
 
 # Previously there were the seeds and the deterministic settings here. Now they are in the modeling_git.py file.
 
@@ -101,9 +106,6 @@ def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
 
     MEAN = np.array([123.675, 116.280, 103.530]) / 255
     STD = np.array([58.395, 57.120, 57.375]) / 255
-
-   
-
     unnormalized_image = (image.numpy() * np.array(STD)[:, None, None]) + np.array(MEAN)[:, None, None]
     unnormalized_image = (unnormalized_image * 255).astype(np.uint8)
     unnormalized_image = np.moveaxis(unnormalized_image, 0, -1)
@@ -129,22 +131,25 @@ def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_
     print('true caption ', test_captions[0])
 
 
-
+print("-- initializing -- ")
+print("Loading optimizer")
 optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
 baby_git_model.to(device).train()
+print("Loading dataset processor")
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers)
 
 lowest_loss = 9999999
-
 last_saved = -1
-
 step = 0  # Global step.
-
 test_images = None
 test_captions = None
 
+
+
+# TODO: As of now, no early stopping is implemented. Implement it if needed.
 print("-- training -- ")
 for epoch in range(n_epochs):
+    epoch_loss = 0
     for preprocessed_images, captions in tqdm(multimodal_dataset_processor.train_dataloader):
         if test_images == None: # choosing first batch as test data
             test_images = preprocessed_images
@@ -160,6 +165,7 @@ for epoch in range(n_epochs):
         preprocessed_images = preprocessed_images.to(device)
         model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
         loss = model_outputs.loss
+        epoch_loss += loss.item()
         print(f'epoch: {epoch} (step: {step}): loss ', loss)
         if loss.item() < lowest_loss and step - last_saved > min_save_every:
             if not os.path.exists(model_save_path):
@@ -170,6 +176,15 @@ for epoch in range(n_epochs):
         optimizer.step()
         optimizer.zero_grad()
         step += 1
+
+        # Log the loss every 50 steps.
+        if step % 50 == 0:
+            wandb.log({'step': step, 'loss': loss.item()})
+    
+    # Print average loss at the end of the epoch.
+    print(f'epoch: {epoch} avg loss: {epoch_loss / len(multimodal_dataset_processor.train_dataloader)}')
+    # Log the average loss.
+    wandb.log({'epoch': epoch, 'avg_loss': epoch_loss / len(multimodal_dataset_processor.train_dataloader)})
 
 
 print('-- EVALUATING GIT MODEL --- ')
