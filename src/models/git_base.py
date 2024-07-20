@@ -51,8 +51,9 @@ class BabyGitModel(nn.Module):
         super(BabyGitModel, self).__init__()
         # Initialize the class attributes here
 
-                
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu") if device == 'cuda' else 'cpu'
+        
+        self.device = device
+        print("Self device: ", self.device)
         # self.processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
 
 
@@ -97,7 +98,7 @@ class BabyGitModel(nn.Module):
             raise ValueError("Please specify either baseline_git_causal_lm or baseline_git_sequence_classification as True (but not both)")
 
         if use_dino_embeds:
-            self.model.git.image_encoder = IdentityVisionModel() # Change made by Rohan. Replaced it to the ViTModel.from_pretrained('facebook/dino-vitb16')
+            self.model.git.image_encoder = IdentityVisionModel()
             self.model.git.encoder.layer[0].attention.self.image_patch_tokens = 1
         else:
             print("Using pretrained dino-vitb16 image encoder.")
@@ -106,7 +107,7 @@ class BabyGitModel(nn.Module):
 
 
         
-        
+        self.model.to(self.device)
         # Train a tokenizer.
         # Image processor need not be trained because all it does is apply transformations to the image.
         

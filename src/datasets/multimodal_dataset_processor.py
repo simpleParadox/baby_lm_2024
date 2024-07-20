@@ -108,10 +108,13 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         return (outputs1, outputs2)
 
 
-    def get_num_batches(self) -> int:
+    def get_num_batches_train(self) -> int:
 
-        return 3318333 // self.batch_size
+        return 2851072 // self.batch_size  # Changed to the number of samples in the all_multimodal.tsv file.
         # return len(self.train_dataloader)
+    
+    def get_num_batches_test(self) -> int:
+        return None  # Currently unimplemented.
     
     @staticmethod
     def seed_dataloader_worker(worker_id):

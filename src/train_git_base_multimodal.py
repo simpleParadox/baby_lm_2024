@@ -7,6 +7,8 @@ import torch
 
 from multimodal_dataset_processor import MultiModalDatasetProcessor
 
+from accelerate import Accelerator
+
 from models.git_base import BabyGitModel
 
 from PIL import Image
@@ -34,13 +36,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=50)
-parser.add_argument('--n_workers', type=int, required=False, default=24)
-parser.add_argument('--min_save_every', type=int, required=False, default=200)
-parser.add_argument('--seed', type=int, required=False, default=22)
+parser.add_argument('--n_workers', type=int, required=False, default=29)
+parser.add_argument('--min_save_every', type=int, required=False, default=1)
+parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--lr', type=float, required=False, default=5e-5)
-parser.add_argument('--optimizer', help="adamw or adam", type=str, required=False, default='adamw')
+parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adamw')
 parser.add_argument('--do_curriculum', type=bool, default=False)  # If this is False, then do standard fine-tuning.
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
+parser.add_argument('--use_accelerate', type=bool, default=False)  # Whether to use accelerate or not.
+parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
 
 
 args = parser.parse_args()
@@ -49,10 +53,17 @@ batch_size = args.batch_size
 dataset_size = args.dataset_size # negative for full dataset
 n_epochs=args.n_epochs
 n_workers = args.n_workers
-device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
+# Create accelerator.
+if args.use_accelerate:
+    accelerator = Accelerator(gradient_accumulation_steps=2)
+    device = accelerator.device
+else:
+    device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 min_save_every = args.min_save_every # saving best model only if last save was > 200 steps ago
 seed = args.seed
 lr = args.lr
+
+print("Device: ", device)
 
 
 if args.model_type == 'causal_lm':
@@ -138,11 +149,17 @@ if args.optimizer == 'adamw':
     optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
 elif args.optimizer == 'adam':
     optimizer = torch.optim.Adam(baby_git_model.parameters(), lr=lr)
+elif args.optimizer == 'sgd':
+    optimizer = torch.optim.SGD(baby_git_model.parameters(), lr=lr)
 
 
 baby_git_model.to(device).train()
+# print("Model loaded")
+# print(baby_git_model)
+
+
 print("Loading dataset processor")
-multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers)
+multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, n_workers=n_workers, device=device)
 
 best_loss = np.inf
 last_saved = -1
@@ -151,22 +168,40 @@ test_images = None
 test_captions = None
 
 
+# full_dataset_length = len(multimodal_dataset_processor.train_dataloader)
+
+# Use the prepare method from accelerator to prepare the pytorch objects.
+if args.use_accelerate:
+    baby_git_model, optimizer, training_dataloader = accelerator.prepare(
+        baby_git_model, optimizer, multimodal_dataset_processor.train_dataloader
+    )
+else:
+    training_dataloader = multimodal_dataset_processor.train_dataloader
 
 # TODO: As of now, no early stopping is implemented. Implement it if needed.
 print("-- training -- ")
+num_batches = multimodal_dataset_processor.get_num_batches_train()
+print("num_batches: ", num_batches)
 
 epoch_iterator = tqdm(range(n_epochs))
 for epoch in epoch_iterator:
     epoch_loss = 0
-    batch_iterator = tqdm(multimodal_dataset_processor.train_dataloader, disable=False, desc=f'epoch: {epoch}')
+    batch_steps = 0
+    batch_iterator = tqdm(training_dataloader, disable=False, desc=f'epoch: {epoch}')
     for preprocessed_images, captions in batch_iterator:
-        if test_images == None: # choosing first batch as test data
-            test_images = preprocessed_images
-            test_captions = captions
+        # if test_images == None: # choosing first batch as test data
+        #     test_images = preprocessed_images
+        #     test_captions = captions
         # print('captions ', captions)
+
+        # with accelerator.accumulate(baby_git_model):
         tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device) # TODO: Check if max length is alright.
-        input_ids = tokenized_captions['input_ids'].to(device)
-        attention_mask = tokenized_captions['attention_mask'].to(device)
+
+        if not args.use_accelerate:
+            input_ids = tokenized_captions['input_ids'].to(device)
+            attention_mask = tokenized_captions['attention_mask'].to(device)
+
+        
         # print(f'caps ({step}): ', captions[0])
         # print("preprocessed_image[0] shape ", preprocessed_images[0].shape)
         # image = unnormalize_image_for_display(preprocessed_images[0])
@@ -181,30 +216,39 @@ for epoch in epoch_iterator:
 
         batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()},')
         batch_iterator.update(1)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        step += 1
-        # Log the loss every 50 steps.
-        if step % 50 == 0:
-            wandb.log({'step': step, 'loss': loss.item()})
+        if args.use_accelerate:
+            accelerator.backward(loss)
+        else:
+            loss.backward()
 
-    epoch_loss /= len(multimodal_dataset_processor.train_dataloader)
+        if (batch_steps + 1) % args.gradient_accumulation_steps == 0 or batch_steps + 1 == num_batches:
+            optimizer.step()
+            optimizer.zero_grad()
+
+
+            step += 1
+            batch_steps += 1
+
+            # Log the loss every 50 steps.
+            if step % 50 == 0:
+                wandb.log({'step': step, 'loss': loss.item()})
+
+    epoch_loss /= batch_steps
 
     if epoch_loss < best_loss and step - last_saved > min_save_every:
         if not os.path.exists(model_save_path):
             os.makedirs(model_save_path)
         torch.save(baby_git_model.state_dict(), model_save_path)
-        last_saved = step
+        last_saved = epoch
         best_loss = epoch_loss
 
     
     # Print average loss at the end of the epoch.
-    epoch_iterator.set_description(f'epoch: {epoch} avg loss: {epoch_loss / len(multimodal_dataset_processor.train_dataloader)}')
+    epoch_iterator.set_description(f'epoch: {epoch} avg loss: {epoch_loss / batch_steps}')
     # Log the average loss.
-    wandb.log({'epoch': epoch, 'avg_loss': epoch_loss / len(multimodal_dataset_processor.train_dataloader)})
+    wandb.log({'epoch': epoch, 'avg_loss': epoch_loss / batch_steps})
 
 
-print('-- EVALUATING GIT MODEL --- ')
-baby_git_model.eval()
-evaluate_model(model=baby_git_model, preprocessed_images=test_images, test_captions=test_captions)
+print('-- NOT EVALUATING GIT MODEL (FOR NOW) --- ')
+# baby_git_model.eval()
+# evaluate_model(model=baby_git_model, preprocessed_images=test_images, test_captions=test_captions)

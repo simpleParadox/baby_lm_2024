@@ -14,7 +14,7 @@ parameters:
   min_save_every:
     values: [200]
   n_workers:
-    values: [24]
+    values: [30]
   optimizer:
     values: ["adamw"]
   dataset_size:
