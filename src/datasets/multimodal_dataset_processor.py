@@ -243,7 +243,7 @@ def package_images_captions(batch):
 
             
 def _datapipe_from_tsv_url(
-    tsv_url: str, buffer_size: int = 256, dataset_size=-1, indices=None
+    tsv_url: str, buffer_size: int = 256, dataset_size=-1, indices=None, split='train'
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
 
     datapipe =  (dp.iter.FileOpener([tsv_url], mode='r')
@@ -269,9 +269,10 @@ def _datapipe_from_tsv_url(
             )
         else:
             # The indices will actually depend on the supplied ones. For each split, the indices will be different.
+            print(f"Indices for split: {split}: ", indices)
+            print("Length of indices: ", len(indices))
             datapipe = (datapipe.slice(indices))
-
-
+            # print("Data pipe sliced: ", datapipe)
 
 
     datapipe: dp = (
@@ -289,7 +290,7 @@ def _datapipe_from_tsv_url(
 def multimodal_dataset_pipe(
     split: str = "train", buffer_size: int = 8, dataset_size=-1, indices=None
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
-    return _datapipe_from_tsv_url(tsv_url=TSV_URLS[split], buffer_size=buffer_size, dataset_size=dataset_size, indices=indices)
+    return _datapipe_from_tsv_url(tsv_url=TSV_URLS[split], buffer_size=buffer_size, dataset_size=dataset_size, indices=indices, split=split)
 
 
 

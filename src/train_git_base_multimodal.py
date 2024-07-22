@@ -76,7 +76,7 @@ else:
     raise ValueError('model_type should be either causal_lm or sequence.')
 
 # Initialize wandb.
-wandb.init(project='babylm_2024')
+wandb.init(project='babylm_2024', mode='disabled')
 
 # Create dict from args.
 args_dict = vars(args)
@@ -190,10 +190,10 @@ for epoch in epoch_iterator:
     batch_steps = 0
     batch_iterator = tqdm(training_dataloader, disable=False, desc=f'epoch: {epoch}')
     for preprocessed_images, captions in batch_iterator:
-        if test_images == None: # choosing first batch as test data
-            test_images = preprocessed_images
-            test_captions = captions
-        print('captions ', captions)
+        # if test_images == None: # choosing first batch as test data
+        #     test_images = preprocessed_images
+        #     test_captions = captions
+        # print('captions ', captions)
 
         # with accelerator.accumulate(baby_git_model):
         tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device) # TODO: Check if max length is alright.

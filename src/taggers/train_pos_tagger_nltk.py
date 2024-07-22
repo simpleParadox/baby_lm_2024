@@ -1,5 +1,19 @@
-# %%
-#Regex module for checking alphanumeric values.
+"""
+Train a custom POS tagger using the custom dataset augmented using the penn treebank dataset.
+"""
+
+# All the data is stored in the src/taggers/data/ directory.
+
+from pathlib import Path
+import os
+import numpy as np
+data_dir = Path("data/")
+paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"]]
+print("Paths: ", paths)
+
+
+
+
 import re
 def extract_features(sentence, index):
   return {
@@ -36,113 +50,106 @@ def transform_to_dataset(tagged_sentences):
     y.append(sent_tags)
   return X, y
 
-# %%
-#This cell loads the Penn Treebank corpus from nltk into a list variable named penn_treebank.
-
-#No need to install nltk in google colab since it is preloaded in the environments.
-#!pip install nltk
-import nltk
-nltk.download('treebank')
-
-#Ensure that the treebank corpus is downloaded
-
-#Load the treebank corpus class
-# from nltk.corpus import treebank
-
-#Now we iterate over all samples from the corpus (the fileids - that are equivalent to sentences) 
-#and retrieve the word and the pre-labeled PoS tag. This will be added as a list of tuples with 
-#a list of words and a list of their respective PoS tags (in the same order).
-# penn_treebank = []
-# for fileid in treebank.fileids():
-#   tokens = []
-#   tags = []
-#   for word, tag in treebank.tagged_words(fileid):
-#     tokens.append(word)
-#     tags.append(tag)
-#   penn_treebank.append((tokens, tags))
-
-# %%
-from pathlib import Path
-data_dir = Path("../../data/train_50M_multimodal_clean/")
-paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
-print("Paths: ", paths)
-# %%
-from nltk.tag import pos_tag
-from pathlib import Path
-
-def process_text_file(file_path):
-    words = []
-    tags = []
-    f = open(file_path, 'rb')
-    n = sum(1 for _ in f)  # count the number of lines in the file
-    print("Total lines in file: ", n)
-    f.close()
-    pattern = r"\b\w+(?:'\w+)?\b|\b\w+(?:-\w+)*\b|\d+(?:\.\d+)?|\S"  # Only consider the words.
-    k = 0
-    sentences_list = []
-    with open(file_path, 'r') as file:
-        for line in file:
-            sentence = line.strip()
-
-            # Split the sentence using the refined regex pattern
-            tokens = re.findall(pattern, sentence)
-            tagged_sentence = pos_tag(tokens)
-            # print(tagged_sentence)
-            
-            for word, tag in tagged_sentence:
-                words.append(word)
-                tags.append(tag)
-            k += 1
-            sentences_list.append((words, tags))
-            
-            print("Completed line {0} out of {1}".format(k, n), end="\r")
-    return sentences_list
-
-# Example usage:
-global_list = []
-for file_path in paths:
-    # file_path = paths[i]
-    print("File path: ", file_path)
-    result = process_text_file(file_path)
-    global_list.extend(result)
-    # print("Global list: ",global_list)
-
-# global_list_set = set(global_list)  # Remove duplicates  # Remove duplicates
-
-# %%
-# Save the global list to a csv file
-# Store global list as a csv file
-import pandas as pd
-df = pd.DataFrame(global_list, columns=["Word", "Tag"])
-df.to_csv("pos_tagging_dataset_with_duplicates.csv", index=False, compression='gzip')
-# with open("../../data/train_50M_multimodal_clean/pos_tags_all_caption_and_text.txt", "w") as file:
-#     for word, tag in global_list:
-#         file.write("{0} {1}\n".format(word, tag))
-#     file.close()
-
-# %%
 
 
-# %%
-# pos_tag(['I','am','going','to','school', '.'])
-
-# # %%
-# # Refined regex pattern
-# text = "Here's an example sentence: with numbers 123 and punctuations, hyphens - and more! high-speed and it's 3.14 and example@example.com"
-
-# # Refined regex pattern
-# pattern = r"[A-Za-z0-9]+(?:'[A-Za-z]+)?|[A-Za-z]+(?:-[A-Za-z]+)*|[0-9]+(?:\.[0-9]+)?|[^\w\s]"
-
-# # Split the sentence using the refined regex pattern
-# tokens = re.findall(pattern, text)
-
-# # %%
-# features = [extract_features(tokens, i) for i in range(len(tokens))]
-
-# # %%
-# features[-2]
-
-# # %%
-# tokens
+# Now load all the data from the pkl files and create a single list.
+print("Loading data, please wait ...")
+import pickle
+from tqdm import tqdm
+data = []
+for path in tqdm(paths):
+  with open(path, "rb") as f:
+    data.extend(pickle.load(f))
 
 
+
+
+
+
+"""
+Create a train, validation, and test split for the data.
+"""
+full_range = np.arange(len(data))
+train_ratio = 0.8
+val_ratio = 0.1
+test_ratio = 0.1
+
+# Calculate the split indices
+num_samples = len(full_range)
+train_end = int(train_ratio * num_samples)
+val_end = train_end + int(val_ratio * num_samples)
+
+# Shuffle the indices to ensure randomness
+np.random.shuffle(full_range)
+
+# Split the indices into train, val, and test sets.
+train_indices = full_range[:train_end]
+val_indices = full_range[train_end:val_end]
+test_indices = full_range[val_end:]
+
+# Convert the indices to lists (optional, as they are already arrays)
+train_indices = train_indices.tolist()
+val_indices = val_indices.tolist()
+test_indices = test_indices.tolist()
+
+
+# Create the train, val, and test sets
+train_data = [data[i] for i in train_indices]
+val_data = [data[i] for i in val_indices]
+test_data = [data[i] for i in test_indices]
+
+X_train, y_train = transform_to_dataset(train_data)
+X_val, y_val = transform_to_dataset(val_data)
+X_test, y_test = transform_to_dataset(test_data)
+
+
+#Ignoring some warnings for the sake of readability.
+import warnings
+warnings.filterwarnings('ignore')
+
+#First, install sklearn_crfsuite, as it is not preloaded into Colab. 
+from sklearn_crfsuite import CRF
+
+#This loads the model. Specifics are: 
+#algorithm: methodology used to check if results are improving. Default is lbfgs (gradient descent).
+#c1 and c2:  coefficients used for regularization.
+#max_iterations: max number of iterations (DUH!)
+#all_possible_transitions: since crf creates a "network", of probability transition states,
+#this option allows it to map even "connections" not present in the data.
+penn_crf = CRF(
+    algorithm='lbfgs',
+    c1=0.01,
+    c2=0.1,
+    max_iterations=100,
+    all_possible_transitions=True
+)
+
+
+# Start initiating the hyperparameter tuning process for nested cross-validation.
+
+params_space = {
+    'c1': [0.01, 0.1, 1],
+    'c2': [0.01, 0.1, 1]
+}
+
+from sklearn.model_selection import GridSearchCV
+
+SEEDS = [0, 1, 2, 3, 4]
+
+for seed in SEEDS:
+    penn_crf = CRF(
+        algorithm='lbfgs',
+        max_iterations=100,
+        all_possible_transitions=True
+    )
+    penn_crf.fit(X_train, y_train)
+    y_pred = penn_crf.predict(X_val)
+    print("Seed: ", seed)
+    print("Validation accuracy: ", metrics.flat_accuracy_score(y_val, y_pred))
+    print("Validation F1 score: ", metrics.flat_f1_score(y_val, y_pred, average='weighted'))
+
+
+#The fit method is the default name used by Machine Learning algorithms to start training.
+print("Started training on Penn Treebank corpus!")
+penn_crf.fit(X_train, y_train)
+print("Finished training on Penn Treebank corpus!")
