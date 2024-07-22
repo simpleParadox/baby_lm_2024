@@ -67,7 +67,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         val_end = train_end + int(val_ratio * num_samples)
 
         # Shuffle the indices to ensure randomness
-        np.random.shuffle(self.full_range)
+        np.random.shuffle(self.full_range, random_state=manual_seed)
 
         # Split the indices into train, val, and test sets
         self.train_indices = self.full_range[:train_end]
@@ -95,6 +95,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         # always need to first load train then load val dataset. Fix this confusing requirement later
         self.load_train_dataset()
         self.load_val_dataset()
+        self.load_test_dataset()
 
 
     def collate_fn(self, batch) -> tuple[Tensor, list[str]]:

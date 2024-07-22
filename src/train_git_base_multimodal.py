@@ -35,7 +35,7 @@ import argparse  # This is necessary for wandb sweeps.
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=10000)
-parser.add_argument('--n_epochs', type=int, required=False, default=50)
+parser.add_argument('--n_epochs', type=int, required=False, default=2)
 parser.add_argument('--n_workers', type=int, required=False, default=29)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
@@ -45,6 +45,7 @@ parser.add_argument('--do_curriculum', type=bool, default=False)  # If this is F
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
 parser.add_argument('--use_accelerate', type=bool, default=False)  # Whether to use accelerate or not.
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
+parser.add_argument('--max_token_length', type=int, default=50)
 
 
 args = parser.parse_args()
@@ -126,21 +127,7 @@ def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     return img
 
 
-def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
 
-
-    tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device)
-    img = unnormalize_image_for_display(preprocessed_images[0])
-    img.save(f'test_image_eval.jpg')
-    preprocessed_images = preprocessed_images.to(device)
-
-    
-    model.eval()
-    # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
-    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=50) 
-    generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    print('generated caption: ', generated_caption)
-    print('true caption ', test_captions[0])
 
 
 print("-- initializing -- ")
@@ -178,6 +165,8 @@ if args.use_accelerate:
     )
 else:
     training_dataloader = multimodal_dataset_processor.train_dataloader
+    val_dataloader = multimodal_dataset_processor.val_dataloader
+    test_dataloader = multimodal_dataset_processor.test_dataloader
 
 # TODO: As of now, no early stopping is implemented. Implement it if needed.
 print("-- training -- ")
@@ -196,7 +185,7 @@ for epoch in epoch_iterator:
         # print('captions ', captions)
 
         # with accelerator.accumulate(baby_git_model):
-        tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device) # TODO: Check if max length is alright.
+        tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
 
         if not args.use_accelerate:
             input_ids = tokenized_captions['input_ids'].to(device)
@@ -234,6 +223,18 @@ for epoch in epoch_iterator:
             if step % 50 == 0:
                 wandb.log({'step': step, 'loss': loss.item()})
 
+    # Validate two epochs.
+    if epoch % 2 == 0:
+        print("Validating")
+        # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+        baby_git_model.eval()
+        for preprocessed_images, captions in val_dataloader:
+            tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+            preprocessed_images = preprocessed_images.to(device)
+            model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
+            loss = model_outputs.loss
+            wandb.log({'val_loss': loss.item()})
+
     epoch_loss /= batch_steps
 
     if epoch_loss < best_loss and step - last_saved > min_save_every:
@@ -253,3 +254,20 @@ for epoch in epoch_iterator:
 print('-- NOT EVALUATING GIT MODEL (FOR NOW) --- ')
 # baby_git_model.eval()
 # evaluate_model(model=baby_git_model, preprocessed_images=test_images, test_captions=test_captions)
+
+
+def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
+
+
+    tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device)
+    img = unnormalize_image_for_display(preprocessed_images[0])
+    img.save(f'test_image_eval.jpg')
+    preprocessed_images = preprocessed_images.to(device)
+
+    
+    model.eval()
+    # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
+    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=50) 
+    generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    print('generated caption: ', generated_caption)
+    print('true caption ', test_captions[0])
