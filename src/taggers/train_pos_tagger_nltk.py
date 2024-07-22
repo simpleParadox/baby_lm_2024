@@ -63,46 +63,6 @@ for path in tqdm(paths):
 
 
 
-
-
-
-"""
-Create a train, validation, and test split for the data.
-"""
-full_range = np.arange(len(data))
-train_ratio = 0.8
-val_ratio = 0.1
-test_ratio = 0.1
-
-# Calculate the split indices
-num_samples = len(full_range)
-train_end = int(train_ratio * num_samples)
-val_end = train_end + int(val_ratio * num_samples)
-
-# Shuffle the indices to ensure randomness
-np.random.shuffle(full_range)
-
-# Split the indices into train, val, and test sets.
-train_indices = full_range[:train_end]
-val_indices = full_range[train_end:val_end]
-test_indices = full_range[val_end:]
-
-# Convert the indices to lists (optional, as they are already arrays)
-train_indices = train_indices.tolist()
-val_indices = val_indices.tolist()
-test_indices = test_indices.tolist()
-
-
-# Create the train, val, and test sets
-train_data = [data[i] for i in train_indices]
-val_data = [data[i] for i in val_indices]
-test_data = [data[i] for i in test_indices]
-
-X_train, y_train = transform_to_dataset(train_data)
-X_val, y_val = transform_to_dataset(val_data)
-X_test, y_test = transform_to_dataset(test_data)
-
-
 #Ignoring some warnings for the sake of readability.
 import warnings
 warnings.filterwarnings('ignore')
@@ -110,12 +70,6 @@ warnings.filterwarnings('ignore')
 #First, install sklearn_crfsuite, as it is not preloaded into Colab. 
 from sklearn_crfsuite import CRF
 
-#This loads the model. Specifics are: 
-#algorithm: methodology used to check if results are improving. Default is lbfgs (gradient descent).
-#c1 and c2:  coefficients used for regularization.
-#max_iterations: max number of iterations (DUH!)
-#all_possible_transitions: since crf creates a "network", of probability transition states,
-#this option allows it to map even "connections" not present in the data.
 penn_crf = CRF(
     algorithm='lbfgs',
     c1=0.01,
@@ -132,24 +86,20 @@ params_space = {
     'c2': [0.01, 0.1, 1]
 }
 
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, ShuffleSplit, cross_val_score
 
 SEEDS = [0, 1, 2, 3, 4]
 
+cross_val_scores = []
+
+
+# TODO: Get the X_data, and y_data, which is technically the first and the second column of the data.
+X_data = [data[i][0] for i in range(len(data))]
+y_data = [data[i][1] for i in range(len(data))]
+
 for seed in SEEDS:
-    penn_crf = CRF(
-        algorithm='lbfgs',
-        max_iterations=100,
-        all_possible_transitions=True
-    )
-    penn_crf.fit(X_train, y_train)
-    y_pred = penn_crf.predict(X_val)
-    print("Seed: ", seed)
-    print("Validation accuracy: ", metrics.flat_accuracy_score(y_val, y_pred))
-    print("Validation F1 score: ", metrics.flat_f1_score(y_val, y_pred, average='weighted'))
+    outer_cv = ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed)  # Five splits of 90% train, 10% test.
+    clf = GridSearchCV(penn_crf, params_space, cv=ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed), verbose=1, n_jobs=-1)  # Will do 5 fold cv on the training set (90% of the data).
+    cross_val_scores.append(cross_val_score(clf, X_data, y_data, cv=outer_cv, n_jobs=-1).mean())
 
-
-#The fit method is the default name used by Machine Learning algorithms to start training.
-print("Started training on Penn Treebank corpus!")
-penn_crf.fit(X_train, y_train)
-print("Finished training on Penn Treebank corpus!")
+print(f"Test scores on {len(SEEDS)} seeds: ", cross_val_scores)
