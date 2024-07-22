@@ -23,6 +23,7 @@ from torch import Tensor
 TSV_URLS = {
     'train': 'src/datasets/multimodal_train/all_multimodal.tsv',
     'val': 'src/datasets/multimodal_train/all_multimodal.tsv',
+    'test': 'src/datasets/multimodal_train/all_multimodal.tsv'
     # 'val': 'src/datasets/Train-GCC-training.tsv'
     # 'train': 'https://storage.cloud.google.com/gcc-data/Train/GCC-training.tsv?_ga=2.191230122.-1896153081.1529438250'
 }
@@ -50,6 +51,36 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.n_workers = n_workers
 
         self.manual_seed = manual_seed
+
+        # Create ranges for train / val / test splits.
+        self.full_range = np.arange(0, 2851072)  # 2851072 is the number of samples in the all_multimodal.tsv file.
+
+
+        # Set the split ratios
+        train_ratio = 0.8
+        val_ratio = 0.1
+        test_ratio = 0.1
+
+        # Calculate the split indices
+        num_samples = len(self.full_range)
+        train_end = int(train_ratio * num_samples)
+        val_end = train_end + int(val_ratio * num_samples)
+
+        # Shuffle the indices to ensure randomness
+        np.random.shuffle(self.full_range)
+
+        # Split the indices into train, val, and test sets
+        self.train_indices = self.full_range[:train_end]
+        self.val_indices = self.full_range[train_end:val_end]
+        self.test_indices = self.full_range[val_end:]
+
+        # Convert the indices to lists (optional, as they are already arrays)
+        self.train_indices = self.train_indices.tolist()
+        self.val_indices = self.val_indices.tolist()
+        self.test_indices = self.test_indices.tolist()
+
+
+
 
         
 
@@ -127,7 +158,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     def load_train_dataset(self):
 
-        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size)
+        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices)
 
         batch_size = self.batch_size
         self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
@@ -136,7 +167,16 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
         # self.val_data_pipe = multimodal_dataset_pipe(split="val")
         # for now, same as train
-        self.val_data_pipe = multimodal_dataset_pipe(split="val")
+        self.val_data_pipe = multimodal_dataset_pipe(split="val", indices=self.val_indices)
+        batch_size = self.batch_size
+        self.val_dataloader = DataLoader(self.val_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
+    
+    def load_test_dataset(self):
+
+        self.test_data_pipe = multimodal_dataset_pipe(split="test", indices=self.test_indices)
+        batch_size = self.batch_size
+        self.test_dataloader = DataLoader(self.test_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
+
 
 
     def print_dataset_stats(self):
@@ -203,7 +243,7 @@ def package_images_captions(batch):
 
             
 def _datapipe_from_tsv_url(
-    tsv_url: str, buffer_size: int = 256, dataset_size=-1
+    tsv_url: str, buffer_size: int = 256, dataset_size=-1, indices=None
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
 
     datapipe =  (dp.iter.FileOpener([tsv_url], mode='r')
@@ -219,12 +259,18 @@ def _datapipe_from_tsv_url(
         )
 
     else:
-        datapipe = (
-            datapipe
-            # NO HEADER
-            .shuffle()
-            
-        )
+        if indices is None:
+            # Return the whole datapipe.
+            datapipe = (
+                datapipe
+                # NO HEADER
+                .shuffle() # Load all the data.
+                
+            )
+        else:
+            # The indices will actually depend on the supplied ones. For each split, the indices will be different.
+            datapipe = (datapipe.slice(indices))
+
 
 
 
@@ -241,9 +287,9 @@ def _datapipe_from_tsv_url(
     # return datapipe
 
 def multimodal_dataset_pipe(
-    split: str = "train", buffer_size: int = 8, dataset_size=-1
+    split: str = "train", buffer_size: int = 8, dataset_size=-1, indices=None
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
-    return _datapipe_from_tsv_url(tsv_url=TSV_URLS[split], buffer_size=buffer_size, dataset_size=dataset_size)
+    return _datapipe_from_tsv_url(tsv_url=TSV_URLS[split], buffer_size=buffer_size, dataset_size=dataset_size, indices=indices)
 
 
 

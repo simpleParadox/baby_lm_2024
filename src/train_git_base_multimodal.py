@@ -34,7 +34,7 @@ import argparse  # This is necessary for wandb sweeps.
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
-parser.add_argument('--dataset_size', type=int, required=False, default=-1)
+parser.add_argument('--dataset_size', type=int, required=False, default=10000)
 parser.add_argument('--n_epochs', type=int, required=False, default=50)
 parser.add_argument('--n_workers', type=int, required=False, default=29)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
@@ -59,7 +59,7 @@ if args.use_accelerate:
     device = accelerator.device
 else:
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
-min_save_every = args.min_save_every # saving best model only if last save was > 200 steps ago
+min_save_every = args.min_save_every # saving best model every fixed number of epochs.
 seed = args.seed
 lr = args.lr
 
@@ -89,7 +89,8 @@ wandb.log(args_dict) # Log the args.
 timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 random_dir = np.random.randint(0, 100000)
 
-root_level_path = '../'
+root_level_path = os.getcwd() + '/'
+print("root_level_path: ", root_level_path)
 model_save_path = root_level_path + 'saved_models/'
 
 if args.do_curriculum:
@@ -98,7 +99,7 @@ else:
     model_save_path += f'curriculum/{args.model_type}/seed_{seed}/'
 
 
-model_save_path += f'{timestamp}_{random_dir}/'
+model_save_path += f'{timestamp}_{random_dir}/best_model.pth'
 
 print(f'model_save_path: {model_save_path}')
 wandb.log({'model_save_path': model_save_path})
@@ -189,10 +190,10 @@ for epoch in epoch_iterator:
     batch_steps = 0
     batch_iterator = tqdm(training_dataloader, disable=False, desc=f'epoch: {epoch}')
     for preprocessed_images, captions in batch_iterator:
-        # if test_images == None: # choosing first batch as test data
-        #     test_images = preprocessed_images
-        #     test_captions = captions
-        # print('captions ', captions)
+        if test_images == None: # choosing first batch as test data
+            test_images = preprocessed_images
+            test_captions = captions
+        print('captions ', captions)
 
         # with accelerator.accumulate(baby_git_model):
         tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device) # TODO: Check if max length is alright.
@@ -238,7 +239,7 @@ for epoch in epoch_iterator:
     if epoch_loss < best_loss and step - last_saved > min_save_every:
         if not os.path.exists(model_save_path):
             os.makedirs(model_save_path)
-        torch.save(baby_git_model.state_dict(), model_save_path)
+        baby_git_model.save_model(model_save_path)
         last_saved = epoch
         best_loss = epoch_loss
 

@@ -5,6 +5,7 @@ import numpy as np
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers import ViTFeatureExtractor, ViTModel, ViTConfig
 from torch import nn
+from transformers import PreTrainedModel
 import transformers.models.git.modeling_git as modeling_git
 
 from tokenizers import Tokenizer
@@ -134,7 +135,10 @@ class BabyGitModel(nn.Module):
         return model_outputs
 
         
-        
+    def save_model(self, model_save_path):
+        self.model.save_pretrained(model_save_path)
+        print(f"Model saved at {model_save_path}")
+
         
     # def train(self, train_dataloader, val_dataloader, method='random', pacing='gaussian', t_total=1000):
     #     pass

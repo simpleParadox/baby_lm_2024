@@ -47,7 +47,7 @@ nltk.download('treebank')
 #Ensure that the treebank corpus is downloaded
 
 #Load the treebank corpus class
-from nltk.corpus import treebank
+# from nltk.corpus import treebank
 
 #Now we iterate over all samples from the corpus (the fileids - that are equivalent to sentences) 
 #and retrieve the word and the pre-labeled PoS tag. This will be added as a list of tuples with 
@@ -79,6 +79,7 @@ def process_text_file(file_path):
     f.close()
     pattern = r"\b\w+(?:'\w+)?\b|\b\w+(?:-\w+)*\b|\d+(?:\.\d+)?|\S"  # Only consider the words.
     k = 0
+    sentences_list = []
     with open(file_path, 'r') as file:
         for line in file:
             sentence = line.strip()
@@ -92,9 +93,10 @@ def process_text_file(file_path):
                 words.append(word)
                 tags.append(tag)
             k += 1
+            sentences_list.append((words, tags))
             
             print("Completed line {0} out of {1}".format(k, n), end="\r")
-    return list(zip(words, tags))
+    return sentences_list
 
 # Example usage:
 global_list = []
@@ -103,20 +105,16 @@ for file_path in paths:
     print("File path: ", file_path)
     result = process_text_file(file_path)
     global_list.extend(result)
+    # print("Global list: ",global_list)
 
-global_list_set = set(global_list)  # Remove duplicates
+# global_list_set = set(global_list)  # Remove duplicates  # Remove duplicates
 
 # %%
 # Save the global list to a csv file
 # Store global list as a csv file
 import pandas as pd
-df = pd.DataFrame(global_list_set, columns=["Word", "Tag"])
-df.to_csv("pos_tagging_dataset_no_duplicates.csv", index=False, compression='gzip')
-
-
 df = pd.DataFrame(global_list, columns=["Word", "Tag"])
 df.to_csv("pos_tagging_dataset_with_duplicates.csv", index=False, compression='gzip')
-
 # with open("../../data/train_50M_multimodal_clean/pos_tags_all_caption_and_text.txt", "w") as file:
 #     for word, tag in global_list:
 #         file.write("{0} {1}\n".format(word, tag))
