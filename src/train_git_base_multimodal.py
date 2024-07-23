@@ -242,7 +242,7 @@ for epoch in epoch_iterator:
         # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
         baby_git_model.eval()
         print("Eval mode")
-        for preprocessed_images, captions in val_dataloader:
+        for preprocessed_images, captions in tqdm(val_dataloader):
             tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
             preprocessed_images = preprocessed_images.to(device)
             model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
