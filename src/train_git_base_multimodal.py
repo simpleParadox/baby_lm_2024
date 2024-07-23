@@ -136,12 +136,11 @@ def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_
 
     
     model.eval()
+    results = []
     # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
     generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=args.max_length) 
     generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    print('generated caption: ', generated_caption)
-    print('true caption ', test_captions[0])
-
+    return generated_caption, test_captions
 
 
 print("-- initializing -- ")
@@ -272,8 +271,17 @@ for epoch in epoch_iterator:
 # Test model
 baby_git_model.eval()
 print("Testing")
+all_generated_captions = []
 for preprocessed_images, captions in test_dataloader:
-    evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+    generated_caption, true_captions = evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+    all_generated_captions.append([generated_caption, true_captions])
+
+# Save in a dataframe.
+import pandas as pd
+df = pd.DataFrame(all_generated_captions, columns=['generated_caption', 'true_captions'])
+
+# Save as a wandb Table.
+wandb.log({'test_results_table': wandb.Table(dataframe=df)})
 
 
 # baby_git_model.eval()
