@@ -25,3 +25,5 @@ parameters:
     values: [True]  # This is True for curriculum learning.
   model_type:
     values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
+  max_token_length:
+    values: [50]
