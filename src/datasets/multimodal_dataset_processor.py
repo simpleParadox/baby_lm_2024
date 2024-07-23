@@ -67,7 +67,8 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         val_end = train_end + int(val_ratio * num_samples)
 
         # Shuffle the indices to ensure randomness
-        np.random.shuffle(self.full_range, random_state=manual_seed)
+        np.random.seed(manual_seed)
+        np.random.shuffle(self.full_range)
 
         # Split the indices into train, val, and test sets
         self.train_indices = self.full_range[:train_end]
