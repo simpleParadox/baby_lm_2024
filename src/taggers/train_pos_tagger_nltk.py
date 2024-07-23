@@ -80,17 +80,17 @@ import pickle
 from tqdm import tqdm
 
 # Load tagged data and process them.
+all_X_data = []
+all_y_data = []
 for path in tqdm(paths):
 
     file_name = Path(path).name
     # Drop the .train extension
     file_name = file_name.split(".")[0]
 
-    all_X_data = []
-    all_y_data = []
 
     if os.path.exists(f"/home/rsaha/projects/babylm/src/taggers/processed_tagger_data/processed_pos_training_data_{file_name}.pkl"):
-        with open(f"/home/rsaha/projects/babylm/src/taggers/processed_tagger_dataa/processed_pos_training_data_{file_name}.pkl", "rb") as f:
+        with open(f"/home/rsaha/projects/babylm/src/taggers/processed_tagger_data/processed_pos_training_data_{file_name}.pkl", "rb") as f:
             total = os.path.getsize(f"/home/rsaha/projects/babylm/src/taggers/processed_tagger_data/processed_pos_training_data_{file_name}.pkl")
             with TQDMBytesReader(f, total=total) as pbfd:
                 up = pickle.Unpickler(pbfd)
@@ -115,36 +115,36 @@ for path in tqdm(paths):
 
 
 #Ignoring some warnings for the sake of readability.
-# import warnings
-# warnings.filterwarnings('ignore')
+import warnings
+warnings.filterwarnings('ignore')
 
 # #First, install sklearn_crfsuite, as it is not preloaded into Colab. 
-# from sklearn_crfsuite import CRF
+from sklearn_crfsuite import CRF
 
-# penn_crf = CRF(
-#     algorithm='lbfgs',
-#     max_iterations=100,
-#     all_possible_transitions=True
-# )
+penn_crf = CRF(
+    algorithm='lbfgs',
+    max_iterations=100,
+    all_possible_transitions=True
+)
 
 
 # # Start initiating the hyperparameter tuning process for nested cross-validation.
 
-# params_space = {
-#     'c1': [0.01, 0.1, 1],
-#     'c2': [0.01, 0.1, 1]
-# }
+params_space = {
+    'c1': [0.01, 0.1, 1],
+    'c2': [0.01, 0.1, 1]
+}
 
-# from sklearn.model_selection import GridSearchCV, ShuffleSplit, cross_val_score
+from sklearn.model_selection import GridSearchCV, ShuffleSplit, cross_val_score
 
-# SEEDS = [0, 1, 2, 3, 4]
+SEEDS = [0, 1, 2, 3, 4]
 
-# cross_val_scores = []
+cross_val_scores = []
 
-# for seed in SEEDS:
-#     print("Seed: ", seed)
-#     outer_cv = ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed)  # Five splits of 90% train, 10% test.
-#     clf = GridSearchCV(penn_crf, params_space, cv=ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed), verbose=5, n_jobs=-1)  # Will do 5 fold cv on the training set (90% of the data).
-#     cross_val_scores.append(cross_val_score(clf, X_data, y_data, cv=outer_cv, n_jobs=-1).mean())
+for seed in SEEDS:
+    print("Seed: ", seed)
+    outer_cv = ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed)  # Five splits of 90% train, 10% test.
+    clf = GridSearchCV(penn_crf, params_space, cv=ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed), verbose=5, n_jobs=-1)  # Will do 5 fold cv on the training set (90% of the data).
+    cross_val_scores.append(cross_val_score(clf, X_data, y_data, cv=outer_cv, n_jobs=-1).mean())
 
-# print(f"Test scores on {len(SEEDS)} seeds: ", cross_val_scores)
+print(f"Test scores on {len(SEEDS)} seeds: ", cross_val_scores)

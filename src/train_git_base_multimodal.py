@@ -271,6 +271,7 @@ for epoch in epoch_iterator:
 # Test model
 baby_git_model.eval()
 print("Testing")
+print("Test indices: ", multimodal_dataset_processor.test_indices)
 all_generated_captions = []
 for preprocessed_images, captions in test_dataloader:
     generated_caption, true_captions = evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
