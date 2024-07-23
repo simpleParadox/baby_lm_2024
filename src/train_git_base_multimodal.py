@@ -126,7 +126,21 @@ def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
 
     return img
 
+def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
 
+
+    tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+    img = unnormalize_image_for_display(preprocessed_images[0])
+    img.save(f'test_image_eval.jpg')
+    preprocessed_images = preprocessed_images.to(device)
+
+    
+    model.eval()
+    # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
+    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=args.max_length) 
+    generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    print('generated caption: ', generated_caption)
+    print('true caption ', test_captions[0])
 
 
 
@@ -228,12 +242,16 @@ for epoch in epoch_iterator:
         print("Validating")
         # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
         baby_git_model.eval()
+        print("Eval mode")
         for preprocessed_images, captions in val_dataloader:
             tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
             preprocessed_images = preprocessed_images.to(device)
             model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
             loss = model_outputs.loss
             wandb.log({'val_loss': loss.item()})
+        print("Validation done.")
+        baby_git_model.train()
+        print("Train mode")
 
     epoch_loss /= batch_steps
 
@@ -251,23 +269,14 @@ for epoch in epoch_iterator:
     wandb.log({'epoch': epoch, 'avg_loss': epoch_loss / batch_steps})
 
 
-print('-- NOT EVALUATING GIT MODEL (FOR NOW) --- ')
+# Test model
+baby_git_model.eval()
+print("Testing")
+for preprocessed_images, captions in test_dataloader:
+    evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+
+
 # baby_git_model.eval()
 # evaluate_model(model=baby_git_model, preprocessed_images=test_images, test_captions=test_captions)
 
 
-def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
-
-
-    tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=50).to(device)
-    img = unnormalize_image_for_display(preprocessed_images[0])
-    img.save(f'test_image_eval.jpg')
-    preprocessed_images = preprocessed_images.to(device)
-
-    
-    model.eval()
-    # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
-    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=50) 
-    generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    print('generated caption: ', generated_caption)
-    print('true caption ', test_captions[0])
