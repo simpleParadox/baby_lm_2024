@@ -152,7 +152,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     def get_num_batches_train(self) -> int:
 
-        return 2851072 // self.batch_size  # Changed to the number of samples in the all_multimodal.tsv file.
+        return len(self.train_indices) // self.batch_size  # Changed to the number of samples in the all_multimodal.tsv file.
         # return len(self.train_dataloader)
     
     def get_num_batches_test(self) -> int:
@@ -252,15 +252,19 @@ def package_images_captions(batch):
             yield image, caption
 
 
-            
+
+def filter_rows(row, indices):
+    # Return the row if the index in the tsv is in the indices list. 
+    return row if (row[0][0] != '') and (int(row[0][0]) in indices) else False
+    # return [element for i, element in enumerate(row) if i in indices]
+
 def _datapipe_from_tsv_url(
     tsv_url: str, buffer_size: int = 256, dataset_size=-1, indices=None, split='train'
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
 
-    datapipe =  (dp.iter.FileOpener([tsv_url], mode='r')
-        .readlines(return_path=False)
+    datapipe =  dp.iter.FileOpener([tsv_url], mode='r').readlines(return_path=False)
+    
         
-    )
 
     if dataset_size > 0:
         print('applying header')
@@ -282,18 +286,21 @@ def _datapipe_from_tsv_url(
             # The indices will actually depend on the supplied ones. For each split, the indices will be different.
             # print(f"Indices for split: {split}: ", indices)
             print("Length of indices: ", len(indices))
-            datapipe = datapipe.slice(indices)
-            from torchdata.datapipes.iter import LineReader
-            datapipe = LineReader(datapipe.shuffle())
+            print("Type of indices: ", type(indices))
+            # datapipe = datapipe.slice(indices).readlines()
+            # from torchdata.datapipes.iter import LineReader
+            # datapipe = LineReader(datapipe.shuffle())
             # print("Data pipe sliced: ", datapipe)
 
 
-    datapipe: dp = (
-        datapipe
-        .sharding_filter()
-        .map(lambda line: line.split("\t"))
-        .batch(buffer_size)
-    )
+    datapipe: dp = datapipe.sharding_filter().map(lambda line: line.split("\t")).batch(buffer_size)
+
+
+    datapipe = (datapipe.map(lambda elements: filter_rows(elements, indices)))
+
+    
+
+
 
         
 
@@ -330,7 +337,7 @@ class ParallelSampleLoader(IterDataPipe):
                 images = asyncio.run(async_batch_get_images(image_urls))
 
             except:
-
+                print("Batch: ", batch)
                 print('--- FAILED --- ')
                 continue
                 
