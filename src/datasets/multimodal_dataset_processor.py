@@ -81,6 +81,15 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.test_indices = self.test_indices.tolist()
 
 
+        # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
+        indices_train_set = set(self.train_indices)
+        indices_val_set = set(self.val_indices)
+        indices_test_set = set(self.test_indices)
+
+        assert len(indices_train_set.intersection(indices_val_set, indices_test_set)) == 0
+        print("No overlap between the indices of the train, val, and test sets.")
+
+
 
 
         
@@ -273,7 +282,9 @@ def _datapipe_from_tsv_url(
             # The indices will actually depend on the supplied ones. For each split, the indices will be different.
             # print(f"Indices for split: {split}: ", indices)
             print("Length of indices: ", len(indices))
-            datapipe = (datapipe.slice(indices))
+            datapipe = datapipe.slice(indices)
+            from torchdata.datapipes.iter import LineReader
+            datapipe = LineReader(datapipe.shuffle())
             # print("Data pipe sliced: ", datapipe)
 
 

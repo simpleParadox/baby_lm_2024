@@ -47,6 +47,7 @@ class BabyGitModel(nn.Module):
         use_dino_embeds=False,
         baseline_git_causal_lm=False,
         baseline_git_sequence_classification=False,
+        initialize_with_text=False,
         **kwargs):
 
         super(BabyGitModel, self).__init__()
@@ -75,7 +76,8 @@ class BabyGitModel(nn.Module):
              }
             )
         
-
+        if initialize_with_text:
+            raise NotImplementedError("Initializing with text is not implemented yet.")
 
         # GIT needs predefined pad token
         self.processor = GitProcessor(self.clip_image_processor, self.tokenizer)

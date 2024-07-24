@@ -34,8 +34,8 @@ import argparse  # This is necessary for wandb sweeps.
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
-parser.add_argument('--dataset_size', type=int, required=False, default=10000)
-parser.add_argument('--n_epochs', type=int, required=False, default=2)
+parser.add_argument('--dataset_size', type=int, required=False, default=-1)
+parser.add_argument('--n_epochs', type=int, required=False, default=5)
 parser.add_argument('--n_workers', type=int, required=False, default=29)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
@@ -46,6 +46,7 @@ parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", 
 parser.add_argument('--use_accelerate', type=bool, default=False)  # Whether to use accelerate or not.
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
 parser.add_argument('--max_token_length', type=int, default=50)
+parser.add_argument('--initialize_with_text', type=bool, default=False)
 
 
 args = parser.parse_args()
@@ -94,10 +95,14 @@ root_level_path = os.getcwd() + '/'
 print("root_level_path: ", root_level_path)
 model_save_path = root_level_path + 'saved_models/'
 
+if args.initialize_with_text:
+    model_save_path += 'initialize_with_text/'
+
 if args.do_curriculum:
     model_save_path += f'standard/{args.model_type}/seed_{seed}/'
 else:
     model_save_path += f'curriculum/{args.model_type}/seed_{seed}/'
+
 
 
 model_save_path += f'{timestamp}_{random_dir}/best_model.pth'
@@ -110,7 +115,7 @@ wandb.log({'model_save_path': model_save_path})
 
 baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=device, 
                               baseline_git_causal_lm=baseline_git_casual_lm, 
-                              baseline_git_sequence_classification=baseline_git_sequence_classification)
+                              baseline_git_sequence_classification=baseline_git_sequence_classification, initialize_with_text=args.initialize_with_text)
 
 def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     '''
@@ -127,7 +132,6 @@ def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     return img
 
 def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
-
 
     tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
     img = unnormalize_image_for_display(preprocessed_images[0])
@@ -242,7 +246,7 @@ for epoch in epoch_iterator:
         # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
         baby_git_model.eval()
         print("Eval mode")
-        for preprocessed_images, captions in tqdm(val_dataloader):
+        for preprocessed_images, captions in val_dataloader:
             tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
             preprocessed_images = preprocessed_images.to(device)
             model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
@@ -271,8 +275,8 @@ for epoch in epoch_iterator:
 # Test model
 baby_git_model.eval()
 print("Testing")
-print("Test indices: ", multimodal_dataset_processor.test_indices)
 all_generated_captions = []
+print("Test indices: ", multimodal_dataset_processor.test_indices)
 for preprocessed_images, captions in test_dataloader:
     generated_caption, true_captions = evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
     all_generated_captions.append([generated_caption, true_captions])

@@ -78,30 +78,34 @@ def transform_to_dataset(tagged_sentences):
 print("Loading data, please wait ...")
 import pickle
 from tqdm import tqdm
+from joblib import dump, load, Parallel, delayed, Memory
+from multiprocessing import Manager
 
 # Load tagged data and process them.
-all_X_data = []
-all_y_data = []
-for path in tqdm(paths):
 
-    file_name = Path(path).name
-    # Drop the .train extension
-    file_name = file_name.split(".")[0]
+# manager = Manager()
+# all_X_data = manager.list()
+# all_y_data = manager.list()
 
+memory = Memory(location='/home/rsaha/projects/babylm/src/taggers/processed_tagger_data/cache', verbose=0)
 
+@memory.cache
+def load_data(file_name):
     if os.path.exists(f"/home/rsaha/projects/babylm/src/taggers/processed_tagger_data/processed_pos_training_data_{file_name}.pkl"):
+        print("Loading data from file ...")
         with open(f"/home/rsaha/projects/babylm/src/taggers/processed_tagger_data/processed_pos_training_data_{file_name}.pkl", "rb") as f:
             total = os.path.getsize(f"/home/rsaha/projects/babylm/src/taggers/processed_tagger_data/processed_pos_training_data_{file_name}.pkl")
             with TQDMBytesReader(f, total=total) as pbfd:
                 up = pickle.Unpickler(pbfd)
                 X_data, y_data = up.load()
-                all_X_data.extend(X_data)
-                all_y_data.extend(y_data)
-            
-        print("Data loaded from file.")
-        print("Length of X_data: ", len(X_data))
-        print("Length of y_data: ", len(y_data))
+            # X_data, y_data = pickle.load(f)
+            return X_data, y_data
+        # all_X_data.extend(X_data)
+        # all_y_data.extend(y_data)
+
+
     else:
+        print("Processing and storing data ...")
         data = []
         print("path: ", path)
         with open(path, "rb") as f:
@@ -114,18 +118,41 @@ for path in tqdm(paths):
             pickle.dump((X_data, y_data), f)
 
 
+
+file_names = []
+# Only select the cc_3m and local_narr files and store it in filtered_paths.
+filtered_paths = []
+for path in paths:
+    if "cc_3M" in path or "local_narr" in path:
+        filtered_paths.append(path)
+
+for path in tqdm(filtered_paths, desc="Paths"):
+
+    file_name = Path(path).name
+    # Drop the .train extension
+    file_name = file_name.split(".")[0]
+    file_names.append(file_name)
+
+
+results = Parallel(n_jobs=28, backend='loky', verbose=20)(delayed(load_data)(file_name) for file_name in file_names)
+all_X_data = []
+all_y_data = []
+print("Appending results ...")
+for X_data, y_data in tqdm(results):
+    all_X_data.extend(X_data)
+    all_y_data.extend(y_data)
+
+del results
+print("Data loaded successfully.")
+print("Length of all_X_data: ", len(all_X_data))    
+
+
 #Ignoring some warnings for the sake of readability.
 import warnings
 warnings.filterwarnings('ignore')
 
 # #First, install sklearn_crfsuite, as it is not preloaded into Colab. 
 from sklearn_crfsuite import CRF
-
-penn_crf = CRF(
-    algorithm='lbfgs',
-    max_iterations=100,
-    all_possible_transitions=True
-)
 
 
 # # Start initiating the hyperparameter tuning process for nested cross-validation.
@@ -136,15 +163,75 @@ params_space = {
 }
 
 from sklearn.model_selection import GridSearchCV, ShuffleSplit, cross_val_score
+from sklearn.model_selection import train_test_split
+from sklearn_crfsuite.metrics import flat_classification_report
 
 SEEDS = [0, 1, 2, 3, 4]
 
 cross_val_scores = []
 
+# Define the number of train / val / test samples as a percentage of the total data.
+train_size = 0.8
+val_size = 0.1
+# Define the absolute number of samples for each split.
+train_samples = int(train_size * len(all_X_data))
+val_samples = int(val_size * len(all_X_data))
+
+all_X_indices = list(range(len(all_X_data)))
+all_y_indices = list(range(len(all_y_data)))
+
+
+
 for seed in SEEDS:
     print("Seed: ", seed)
-    outer_cv = ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed)  # Five splits of 90% train, 10% test.
-    clf = GridSearchCV(penn_crf, params_space, cv=ShuffleSplit(n_splits=5, test_size=0.1, random_state=seed), verbose=5, n_jobs=-1)  # Will do 5 fold cv on the training set (90% of the data).
-    cross_val_scores.append(cross_val_score(clf, X_data, y_data, cv=outer_cv, n_jobs=-1).mean())
 
-print(f"Test scores on {len(SEEDS)} seeds: ", cross_val_scores)
+    # First divide the dataset into train and test splits.
+    # Then from the train split, divide it into train and validation splits.
+    # Then train the model on the train split and validate on the validation split.
+    
+    # First define the model using each combination of hyperparameters from params_space.
+    for c1 in params_space['c1']:
+        print("c1: ", c1)
+        for c2 in params_space['c2']:
+            print("c2: ", c2)
+            penn_crf = CRF(
+                algorithm='lbfgs',
+                max_iterations=100,
+                all_possible_transitions=False,
+                c1=c1,
+                c2=c2,
+                verbose=5
+            )
+
+            # Split the data into train and test splits.
+            print("Splitting data ...")
+            X_indices, X_test_indices, y_indices, y_test_indices = train_test_split(all_X_indices, all_y_indices, train_size=train_samples, random_state=seed)
+
+            X_train_indices, X_val_indices, y_train_indices, y_val_indices = train_test_split(X_indices, y_indices, test_size=val_samples, random_state=seed)
+
+            data_X_train = [all_X_data[i] for i in tqdm(X_train_indices)]
+            data_X_val = [all_X_data[i] for i in tqdm(X_val_indices)]
+            data_y_train = [all_y_data[i] for i in tqdm(y_train_indices)]
+            data_y_val = [all_y_data[i] for i in tqdm(y_val_indices)]
+
+            # Train the model.
+            print("Training the model ...")
+            penn_crf.fit(data_X_train, data_y_train)
+
+            # Evaluate the model.
+            print("Evaluating the model ...")
+            y_pred = penn_crf.predict(data_X_val)
+
+            # Report the classification metrics.
+            print("Classification report calculations ... ")
+            report = flat_classification_report(y_pred, data_y_val)
+            print(report)
+
+            # Store the report in a log file.
+            print("Storing logs and models.")
+            with open(f"/home/rsaha/projects/babylm/src/taggers/logs/pos_tagger_log_{seed}.txt", "a") as f:
+                f.write(report)
+                f.write("\n\n")
+            
+            # Save the model as a joblib file.
+            dump(penn_crf, f"/home/rsaha/projects/babylm/src/taggers/models/pos_tagger_model_seed_{seed}.joblib")

@@ -58,3 +58,9 @@ pos_tagging_dataset_no_duplicates.csv
 
 saved_models/
 src/taggers/processed_tagger_data/
+
+/home/rsaha/projects/babylm/src/taggers/models/
+
+/home/rsaha/projects/babylm/src/taggers/logs/
+/src/taggers/models/
+/src/taggers/logs/

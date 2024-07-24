@@ -29,7 +29,8 @@ DATA_ROOT = Path("./")
 
 data_dir = Path("./data/train_50M_multimodal_clean/") # Make sure the path is correct here.
 
-paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
+# paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
+paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and (f.name not in ["cc_3M_captions_reduced.train", "local_narr_captions.train"])]
 print(paths)
 
 tokenizer = Tokenizer(WordPiece(unk_token="[UNK]"))
@@ -52,7 +53,7 @@ trainer = WordPieceTrainer(vocab_size=30522, special_tokens=["[UNK]", "[CLS]", "
 # files = [f"data/wikitext-103-raw/wiki.{split}.raw" for split in ["test", "train", "valid"]]
 tokenizer.train(paths, trainer)
 
-tokenizer_path =  DATA_ROOT / "src/tokenizer/multi_50m_and_captions_tokenizer_bert_wordpiece.json"
+tokenizer_path =  DATA_ROOT / "src/tokenizer/multi_50m_and_captions_tokenizer_bert_wordpiece_text_only.json"
 tokenizer.save(str(tokenizer_path), pretty=True)
 
 
