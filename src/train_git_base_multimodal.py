@@ -205,9 +205,29 @@ def train_step(baby_git_model, preprocessed_images, optimizer, input_ids, attent
 # train_step = torch.compile(train_step)
 
 val_iterator = tqdm(val_dataloader)
-
+running_loss = 0
 epoch_iterator = tqdm(range(n_epochs))
 for epoch in epoch_iterator:
+    if epoch % 2 == 0:
+        print("Validating")
+        # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+        baby_git_model.eval()
+        print("Eval mode")
+        val_loss = 0
+        for preprocessed_images, captions in val_iterator:
+            tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+            preprocessed_images = preprocessed_images.to(device)
+            model_outputs = train_step(baby_git_model, preprocessed_images, optimizer=optimizer, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
+            # model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
+            loss = model_outputs.loss
+            val_loss += loss.item()
+            val_iterator.update(1)
+        wandb.log({'val_loss': val_loss / len(val_dataloader)})
+        print("Validation done.")
+        baby_git_model.train()
+        print("Train mode")
+
+    
     epoch_loss = 0
     batch_steps = 0
     batch_iterator = tqdm(training_dataloader, disable=False, desc=f'epoch: {epoch}')
@@ -242,6 +262,7 @@ for epoch in epoch_iterator:
         # optimizer.zero_grad()
         
         epoch_loss += loss.item()
+        running_loss += loss.item()
 
         # print(f'epoch: {epoch} (step: {step}): loss ', loss)
 
@@ -256,25 +277,10 @@ for epoch in epoch_iterator:
 
         # Log the loss every 50 steps.
         if step % 50 == 0:
-            wandb.log({'step': step, 'loss': loss.item()})
+            wandb.log({'step': step, 'loss': epoch_loss / batch_steps})
+            wandb.log({'step': step,'running_loss': running_loss / step})
 
     # Validate two epochs.
-    if epoch % 2 == 0:
-        print("Validating")
-        # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
-        baby_git_model.eval()
-        print("Eval mode")
-        for preprocessed_images, captions in val_iterator:
-            tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
-            preprocessed_images = preprocessed_images.to(device)
-            model_outputs = train_step(baby_git_model, preprocessed_images, optimizer=optimizer, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
-            # model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
-            loss = model_outputs.loss
-            val_iterator.update(1)
-            wandb.log({'val_loss': loss.item()})
-        print("Validation done.")
-        baby_git_model.train()
-        print("Train mode")
 
     epoch_loss /= batch_steps
 
@@ -287,9 +293,9 @@ for epoch in epoch_iterator:
 
     
     # Print average loss at the end of the epoch.
-    epoch_iterator.set_description(f'epoch: {epoch} avg loss: {epoch_loss / batch_steps}')
+    epoch_iterator.set_description(f'epoch: {epoch} per_epoch_loss: {epoch_loss / batch_steps}')
     # Log the average loss.
-    wandb.log({'epoch': epoch, 'avg_loss': epoch_loss / batch_steps})
+    wandb.log({'epoch': epoch, 'per_epoch_loss': epoch_loss / batch_steps})
 
 
 # Test model
