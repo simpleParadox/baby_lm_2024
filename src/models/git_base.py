@@ -22,7 +22,6 @@ sys.path.append("../../git-2024")
 sys.path.append('git-2024')
 
 
-
 from modeling_git import GitForCausalLM, GitForSequenceClassification
 
 
@@ -57,11 +56,11 @@ class BabyGitModel(nn.Module):
 
         
         self.device = device
-        print("Self device: ", self.device)
+        # print("Self device: ", self.device)
         # self.processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
 
         # Load custom config.
-        print("Loading preprocessor from babylm config")
+        # print("Loading preprocessor from babylm config")
         processor_config_path = "/home/rsaha/projects/babylm/git-2024/preprocessor_config.json"
         processor_config = json.load(open(processor_config_path, 'r'))
         self.clip_image_processor = CLIPImageProcessor(processor_config)
@@ -90,12 +89,12 @@ class BabyGitModel(nn.Module):
 
         # self.model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")
 
-        print('-- INITIATING MODEL FROM SCRATCH -- ')
+        # print('-- INITIATING MODEL FROM SCRATCH -- ')
 
         # git_config = GitConfig()
 
         # Define pretrained_configs here
-        print("Loading from babylm config")
+        # print("Loading from babylm config")
         git_config_path = "/home/rsaha/projects/babylm/git-2024/config.json"
         git_config = GitConfig.from_pretrained(git_config_path)
 
@@ -114,7 +113,8 @@ class BabyGitModel(nn.Module):
             self.model.git.image_encoder = IdentityVisionModel()
             self.model.git.encoder.layer[0].attention.self.image_patch_tokens = 1
         else:
-            print("While initializing a model, the image encoder is set to facebook/dino-vitb16 by default.")
+            pass
+            # print("While initializing a model, the image encoder is set to facebook/dino-vitb16 by default.")
 
 
         
@@ -126,6 +126,9 @@ class BabyGitModel(nn.Module):
         # Load a randomly initialized model here.
         # Make sure that the format is of AutoModelForSequenceClassification or AutoModelForCausalLM
 
+    
+
+    
     def forward(self, pixel_values=None, input_ids=None, attention_mask=None) -> CausalLMOutputWithPast:
 
         # CausalLMOutputWithPast is the direct output of the GitModel (which inherits from AutoModelForCausalLM, which is required by eval of babylm)
@@ -134,12 +137,11 @@ class BabyGitModel(nn.Module):
 
         # convert images to pixel values in dataloader ig
 
-        if pixel_values == None:
-            model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
+        # if pixel_values == None:
+        #     model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
             
 
-        
-
+        # else:
         model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
 
         return model_outputs
@@ -147,7 +149,7 @@ class BabyGitModel(nn.Module):
         
     def save_model(self, model_save_path):
         self.model.save_pretrained(model_save_path)
-        print(f"Model saved at {model_save_path}")
+        # print(f"Model saved at {model_save_path}")
 
         
     # def train(self, train_dataloader, val_dataloader, method='random', pacing='gaussian', t_total=1000):
