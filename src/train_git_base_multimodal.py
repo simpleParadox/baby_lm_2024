@@ -34,9 +34,9 @@ import argparse  # This is necessary for wandb sweeps.
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
-parser.add_argument('--dataset_size', type=int, required=False, default=-1)
+parser.add_argument('--dataset_size', type=int, required=False, default=1000)
 parser.add_argument('--n_epochs', type=int, required=False, default=5)
-parser.add_argument('--n_workers', type=int, required=False, default=29)
+parser.add_argument('--n_workers', type=int, required=False, default=1)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--lr', type=float, required=False, default=5e-5)
@@ -202,6 +202,7 @@ for epoch in epoch_iterator:
         # print('captions ', captions)
 
         # with accelerator.accumulate(baby_git_model):
+        print("Batch size: ", preprocessed_images.shape[0])
         tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
 
         if not args.use_accelerate:

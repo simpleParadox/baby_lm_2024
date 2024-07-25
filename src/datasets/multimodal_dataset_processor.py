@@ -47,6 +47,8 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.dataset_size = dataset_size
         
         self.batch_size = batch_size
+        self.val_batch_size = 8
+        self.test_batch_size = 8
 
         self.n_workers = n_workers
 
@@ -179,13 +181,13 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         # self.val_data_pipe = multimodal_dataset_pipe(split="val")
         # for now, same as train
         self.val_data_pipe = multimodal_dataset_pipe(split="val", indices=self.val_indices)
-        batch_size = self.batch_size
+        batch_size = self.val_batch_size
         self.val_dataloader = DataLoader(self.val_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
     
     def load_test_dataset(self):
 
         self.test_data_pipe = multimodal_dataset_pipe(split="test", indices=self.test_indices)
-        batch_size = self.batch_size
+        batch_size = self.test_batch_size
         self.test_dataloader = DataLoader(self.test_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
 
 
@@ -337,7 +339,7 @@ class ParallelSampleLoader(IterDataPipe):
                 images = asyncio.run(async_batch_get_images(image_urls))
 
             except:
-                print("Batch: ", batch)
+                # print("Batch: ", batch)
                 print('--- FAILED --- ')
                 continue
                 

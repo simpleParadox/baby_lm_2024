@@ -13,11 +13,13 @@ from typing import List, Optional, Tuple, Union
 
 from transformers.modeling_outputs import BaseModelOutput
 
+from transformers import PretrainedConfig
+import json
 
 
 import sys
 sys.path.append("../../git-2024")
-
+sys.path.append('git-2024')
 
 
 
@@ -58,8 +60,11 @@ class BabyGitModel(nn.Module):
         print("Self device: ", self.device)
         # self.processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
 
-
-        self.clip_image_processor = CLIPImageProcessor()
+        # Load custom config.
+        print("Loading preprocessor from babylm config")
+        processor_config_path = "/home/rsaha/projects/babylm/git-2024/preprocessor_config.json"
+        processor_config = json.load(open(processor_config_path, 'r'))
+        self.clip_image_processor = CLIPImageProcessor(processor_config)
         # clip image processor should be ok because its just cropping and transforming the image without a learned network
 
         # self.tokenizer = AutoTokenizer.from_pretrained("microsoft/git-base-coco")
@@ -87,26 +92,29 @@ class BabyGitModel(nn.Module):
 
         print('-- INITIATING MODEL FROM SCRATCH -- ')
 
-        git_config = GitConfig()
+        # git_config = GitConfig()
+
+        # Define pretrained_configs here
+        print("Loading from babylm config")
+        git_config_path = "/home/rsaha/projects/babylm/git-2024/config.json"
+        git_config = GitConfig.from_pretrained(git_config_path)
 
         # Set the manual seed that will be later used to set the determinism in the modeling_git.py file.
         git_config.manual_seed = manual_seed
         
-
         if baseline_git_causal_lm and not baseline_git_sequence_classification:
             self.model = GitForCausalLM(git_config)
         elif not baseline_git_causal_lm and baseline_git_sequence_classification:
             self.model = GitForSequenceClassification(git_config)
         else:
             raise ValueError("Please specify either baseline_git_causal_lm or baseline_git_sequence_classification as True (but not both)")
+        
 
         if use_dino_embeds:
             self.model.git.image_encoder = IdentityVisionModel()
             self.model.git.encoder.layer[0].attention.self.image_patch_tokens = 1
         else:
-            print("Using pretrained dino-vitb16 image encoder.")
-            self.model.git_image_encoder = ViTModel.from_pretrained('facebook/dino-vitb16')
-            
+            print("While initializing a model, the image encoder is set to facebook/dino-vitb16 by default.")
 
 
         
