@@ -255,9 +255,14 @@ def package_images_captions(batch):
 
 
 
-def filter_rows(row, indices):
+def filter_rows(rows, indices):
     # Return the row if the index in the tsv is in the indices list. 
-    return row if (row[0][0] != '') and (int(row[0][0]) in indices) else False
+    # return [(row[0] != '') and (int(row[0]) in indices) for row in rows]
+    return [row for row in rows if (row[0] != '' and int(row[0]) in indices)]
+    # res = []
+    # for row in rows:
+    #     if row[0] != '' and int(row[0]) in indices:
+    #         res.append(row)
     # return [element for i, element in enumerate(row) if i in indices]
 
 def _datapipe_from_tsv_url(
@@ -339,7 +344,7 @@ class ParallelSampleLoader(IterDataPipe):
                 images = asyncio.run(async_batch_get_images(image_urls))
 
             except:
-                # print("Batch: ", batch)
+                print("Batch: ", batch)
                 print('--- FAILED --- ')
                 continue
                 

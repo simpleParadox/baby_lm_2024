@@ -34,7 +34,7 @@ import argparse  # This is necessary for wandb sweeps.
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
-parser.add_argument('--dataset_size', type=int, required=False, default=1000)
+parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=5)
 parser.add_argument('--n_workers', type=int, required=False, default=1)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
@@ -117,7 +117,7 @@ baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=de
                               baseline_git_causal_lm=baseline_git_casual_lm, 
                               baseline_git_sequence_classification=baseline_git_sequence_classification, initialize_with_text=args.initialize_with_text)
 
-baby_git_model = torch.compile(baby_git_model)
+# baby_git_model = torch.compile(baby_git_model)
 
 def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     '''
@@ -193,7 +193,7 @@ num_batches = multimodal_dataset_processor.get_num_batches_train()
 print("num_batches: ", num_batches)
 
 
-@torch.compile
+# @torch.compile
 def train_step(baby_git_model, preprocessed_images, optimizer, input_ids, attention_mask):
     model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
     loss = model_outputs.loss
@@ -264,12 +264,13 @@ for epoch in epoch_iterator:
         # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
         baby_git_model.eval()
         print("Eval mode")
-        for preprocessed_images, captions in val_dataloader:
+        for preprocessed_images, captions in val_iterator:
             tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
             preprocessed_images = preprocessed_images.to(device)
             model_outputs = train_step(baby_git_model, preprocessed_images, optimizer=optimizer, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
             # model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
             loss = model_outputs.loss
+            val_iterator.update(1)
             wandb.log({'val_loss': loss.item()})
         print("Validation done.")
         baby_git_model.train()
@@ -306,9 +307,4 @@ df = pd.DataFrame(all_generated_captions, columns=['generated_caption', 'true_ca
 
 # Save as a wandb Table.
 wandb.log({'test_results_table': wandb.Table(dataframe=df)})
-
-
-# baby_git_model.eval()
-# evaluate_model(model=baby_git_model, preprocessed_images=test_images, test_captions=test_captions)
-
 
