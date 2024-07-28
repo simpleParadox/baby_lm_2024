@@ -64,3 +64,4 @@ src/taggers/processed_tagger_data/
 /home/rsaha/projects/babylm/src/taggers/logs/
 /src/taggers/models/
 /src/taggers/logs/
+src/scripts.sh

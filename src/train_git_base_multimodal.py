@@ -78,7 +78,7 @@ else:
     raise ValueError('model_type should be either causal_lm or sequence.')
 
 # Initialize wandb.
-wandb.init(project='babylm_2024', mode='disabled')
+wandb.init(project='babylm_2024')
 
 # Create dict from args.
 args_dict = vars(args)

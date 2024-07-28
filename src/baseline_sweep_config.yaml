@@ -6,17 +6,17 @@ metric:
   name: val_loss
 parameters:
   lr:
-    values: [1e-5]
+    values: [5e-5]
   batch_size:
     values: [32]
   n_epochs:
-    values: [50]
+    values: [10]
   min_save_every:
     values: [200]
   n_workers:
-    values: [24]
+    values: [28]
   optimizer:
-    values: ["adam"]
+    values: ["adamw"]
   dataset_size:
     values: [-1]
   seed:
