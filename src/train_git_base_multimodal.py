@@ -255,6 +255,7 @@ for epoch in epoch_iterator:
         baby_git_model.eval()
         print("Eval mode")
         val_loss = 0
+        val_step = 0  # Using this as a divisor to get the average loss.
         for preprocessed_images, captions in val_dataloader:
             try:
                 tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
@@ -276,7 +277,8 @@ for epoch in epoch_iterator:
 
             val_loss += loss.item()
             val_iterator.update(1)
-        wandb.log({'val_loss': val_loss / num_batches_val})
+            val_step += 1
+        wandb.log({'val_loss': val_loss / val_step})
         print("Validation done.")
         baby_git_model.train()
         print("Train mode")
