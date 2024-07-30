@@ -30,26 +30,50 @@ from modeling_git import GitForSequenceClassification as BaselineGitForSequenceC
 
 import argparse  # This is necessary for wandb sweeps.
 
-
+# torch.backends.cudnn.deterministic = True
+# torch.use_deterministic_algorithms(True)
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=5)
-parser.add_argument('--n_workers', type=int, required=False, default=1)
+parser.add_argument('--n_workers', type=int, required=False, default=28)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--lr', type=float, required=False, default=5e-5)
-parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adamw')
-parser.add_argument('--do_curriculum', type=bool, default=False)  # If this is False, then do standard fine-tuning.
+parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
+parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard fine-tuning.
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
-parser.add_argument('--use_accelerate', type=bool, default=False)  # Whether to use accelerate or not.
+parser.add_argument('--use_accelerate', type=str, default=False)  # Whether to use accelerate or not.
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
 parser.add_argument('--max_token_length', type=int, default=50)
-parser.add_argument('--initialize_with_text', type=bool, default=False)
-
+parser.add_argument('--initialize_with_text', type=str, default=False)
+parser.add_argument('--model_name', type=str, default='git')
+parser.add_argument('--fp16', type=str, default=False)
 
 args = parser.parse_args()
+
+if args.do_curriculum == False or args.do_curriculum == 'False':
+    args.do_curriculum = False
+else:
+    args.do_curriculum = True
+
+if args.use_accelerate == False or args.use_accelerate == 'False':
+    args.use_accelerate = False
+else:
+    args.use_accelerate = True
+
+if args.initialize_with_text == False or args.initialize_with_text == 'False':
+    args.initialize_with_text = False
+else:
+    args.initialize_with_text = True
+
+if args.fp16 == False or args.fp16 == 'False':
+    args.fp16 = False
+else:
+    args.fp16 = True
 
 batch_size = args.batch_size
 dataset_size = args.dataset_size # negative for full dataset
@@ -60,6 +84,7 @@ if args.use_accelerate:
     accelerator = Accelerator(gradient_accumulation_steps=2)
     device = accelerator.device
 else:
+    print("Not using accelerate")
     device = torch.device('cuda:0' if torch.cuda.is_available() else "cpu")
 min_save_every = args.min_save_every # saving best model every fixed number of epochs.
 seed = args.seed
@@ -79,6 +104,7 @@ else:
 
 # Initialize wandb.
 wandb.init(project='babylm_2024')
+# wandb.init(project='babylm_2024')
 
 # Create dict from args.
 args_dict = vars(args)
@@ -111,11 +137,19 @@ print(f'model_save_path: {model_save_path}')
 wandb.log({'model_save_path': model_save_path})
 
 
-# Previously there were the seeds and the deterministic settings here. Now they are in the modeling_git.py file.
 
-baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=device, 
-                              baseline_git_causal_lm=baseline_git_casual_lm, 
-                              baseline_git_sequence_classification=baseline_git_sequence_classification, initialize_with_text=args.initialize_with_text)
+
+# Previously there were the seeds and the deterministic settings here. Now they are in the modeling_git.py file.
+print("Loading model")
+if args.model_name == 'git':
+    print("Loading a version of Git model")
+    baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=device, 
+                                baseline_git_causal_lm=baseline_git_casual_lm, 
+                                baseline_git_sequence_classification=baseline_git_sequence_classification, initialize_with_text=args.initialize_with_text)
+elif args.model_name == 'flamingo':
+    raise ValueError('Flamingo model not supported yet.')
+else:
+    raise ValueError('Other models not supported yet.')
 
 # baby_git_model = torch.compile(baby_git_model)
 
@@ -188,41 +222,61 @@ else:
     test_dataloader = multimodal_dataset_processor.test_dataloader
 
 # TODO: As of now, no early stopping is implemented. Implement it if needed.
-print("-- training -- ")
+
 num_batches = multimodal_dataset_processor.get_num_batches_train()
-print("num_batches: ", num_batches)
+print("num_batches train: ", num_batches)
+running_loss = 0
 
-
+if args.fp16:
+    print("Using fp16")
+    scaler = torch.cuda.amp.GradScaler(enabled=True)
+else:
+    scaler = None
 # @torch.compile
-def train_step(baby_git_model, preprocessed_images, optimizer, input_ids, attention_mask):
-    model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-    loss = model_outputs.loss
-    loss.backward()
-    optimizer.step()
-    optimizer.zero_grad()
-    return model_outputs
+# def train_step(baby_git_model, preprocessed_images, optimizer, input_ids, attention_mask):
+#     model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+#     loss = model_outputs.loss
+#     loss.backward()
+#     optimizer.step()
+#     optimizer.zero_grad()
+#     return model_outputs
 
 # train_step = torch.compile(train_step)
 
-val_iterator = tqdm(val_dataloader)
-running_loss = 0
 epoch_iterator = tqdm(range(n_epochs))
+device_autocast = 'cuda' if torch.cuda.is_available() else 'cpu'
 for epoch in epoch_iterator:
-    if epoch % 2 == 0:
+    if epoch % 1 == 0:
+        num_batches_val = multimodal_dataset_processor.get_num_batches_val()
+        print("Num batches val: ", num_batches_val)
+        val_iterator = tqdm(total=num_batches_val, desc='Validation')
         print("Validating")
         # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
         baby_git_model.eval()
         print("Eval mode")
         val_loss = 0
-        for preprocessed_images, captions in val_iterator:
-            tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+        for preprocessed_images, captions in val_dataloader:
+            try:
+                tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+            except:
+                print("Error in tokenizing captions: ", captions)
+                print("Continuing...")
+                continue
+            input_ids = tokenized_captions['input_ids'].to(device)
+            attention_mask = tokenized_captions['attention_mask'].to(device)
             preprocessed_images = preprocessed_images.to(device)
-            model_outputs = train_step(baby_git_model, preprocessed_images, optimizer=optimizer, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
-            # model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
-            loss = model_outputs.loss
+
+            if args.fp16:
+                with torch.autocast(device_type=device_autocast, dtype=torch.float16):
+                    model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                    loss = model_outputs.loss
+            else:
+                model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                loss = model_outputs.loss
+
             val_loss += loss.item()
             val_iterator.update(1)
-        wandb.log({'val_loss': val_loss / len(val_dataloader)})
+        wandb.log({'val_loss': val_loss / num_batches_val})
         print("Validation done.")
         baby_git_model.train()
         print("Train mode")
@@ -230,48 +284,40 @@ for epoch in epoch_iterator:
     
     epoch_loss = 0
     batch_steps = 0
-    batch_iterator = tqdm(training_dataloader, disable=False, desc=f'epoch: {epoch}')
-    for preprocessed_images, captions in batch_iterator:
-        # if test_images == None: # choosing first batch as test data
-        #     test_images = preprocessed_images
-        #     test_captions = captions
-        # print('captions ', captions)
+    batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
+    for preprocessed_images, captions in training_dataloader:
 
-        # with accelerator.accumulate(baby_git_model):
-        print("Batch size: ", preprocessed_images.shape[0])
-        tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+        optimizer.zero_grad()
 
-
+        try:
+            tokenized_captions = baby_git_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+        except:
+            print("Error in tokenizing captions: ", captions)
+            continue
         input_ids = tokenized_captions['input_ids'].to(device)
         attention_mask = tokenized_captions['attention_mask'].to(device)
 
-        
-        # print(f'caps ({step}): ', captions[0])
-        # print("preprocessed_image[0] shape ", preprocessed_images[0].shape)
-        # image = unnormalize_image_for_display(preprocessed_images[0])
-        # image.save(f'test_image_{step}.jpg')
         preprocessed_images = preprocessed_images.to(device)
-        # model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+        
+        if args.fp16:
+            with torch.autocast(device_type=device_autocast, dtype=torch.float16):
+                model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                loss = model_outputs.loss
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+            loss = model_outputs.loss
+            loss.backward()
+            optimizer.step()
 
-        model_outputs = train_step(baby_git_model, preprocessed_images, optimizer=optimizer, input_ids=input_ids, attention_mask=attention_mask)
-        loss = model_outputs.loss
-        # optimizer = train_step(loss, optimizer)
-
-        # loss.backward()
-        # optimizer.step()
-        # optimizer.zero_grad()
         
         epoch_loss += loss.item()
         running_loss += loss.item()
 
-        # print(f'epoch: {epoch} (step: {step}): loss ', loss)
-
-        batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()},')
+        batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
         batch_iterator.update(1)
-        # if args.use_accelerate:
-        #     accelerator.backward(loss)
-
-
         step += 1
         batch_steps += 1
 

@@ -1,16 +1,16 @@
-program: train_git_base_multimodal.py
-name: baseline
+program: src/train_git_base_multimodal.py
+name: baseline_git_causal_lm
 method: grid
 metric:
   goal: minimize
   name: val_loss
 parameters:
   lr:
-    values: [5e-5]
+    values: [1e-5]
   batch_size:
     values: [32]
   n_epochs:
-    values: [10]
+    values: [5]
   min_save_every:
     values: [200]
   n_workers:
@@ -23,7 +23,15 @@ parameters:
     values: [0, 1, 2, 3, 4]
   do_curriculum:
     values: [False]  # This is False for standard-finetuning.
+  model_name:
+    values: ['git']
   model_type:
     values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
   max_token_length:
     values: [50]
+  initialize_with_text:
+    values: [False]
+  use_accelerate:
+    values: [False]
+  fp16:
+    values: [True]

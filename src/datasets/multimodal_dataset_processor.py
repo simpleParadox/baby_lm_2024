@@ -51,7 +51,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.test_batch_size = 8
 
         self.n_workers = n_workers
-
+        self.val_n_workers = 28
         self.manual_seed = manual_seed
 
         # Create ranges for train / val / test splits.
@@ -160,6 +160,9 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
     def get_num_batches_test(self) -> int:
         return None  # Currently unimplemented.
     
+    def get_num_batches_val(self) -> int:
+        return len(self.val_indices) // self.val_batch_size
+    
     @staticmethod
     def seed_dataloader_worker(worker_id):
         worker_seed = torch.initial_seed() % 2**32 + worker_id
@@ -182,13 +185,13 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         # for now, same as train
         self.val_data_pipe = multimodal_dataset_pipe(split="val", indices=self.val_indices)
         batch_size = self.val_batch_size
-        self.val_dataloader = DataLoader(self.val_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
+        self.val_dataloader = DataLoader(self.val_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.val_n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
     
     def load_test_dataset(self):
 
         self.test_data_pipe = multimodal_dataset_pipe(split="test", indices=self.test_indices)
         batch_size = self.test_batch_size
-        self.test_dataloader = DataLoader(self.test_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
+        self.test_dataloader = DataLoader(self.test_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.val_n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
 
 
 

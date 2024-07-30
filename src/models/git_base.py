@@ -140,7 +140,6 @@ class BabyGitModel(nn.Module):
         # if pixel_values == None:
         #     model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
             
-
         # else:
         model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
 
