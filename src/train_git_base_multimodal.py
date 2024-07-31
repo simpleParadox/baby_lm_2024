@@ -38,7 +38,7 @@ torch.backends.cudnn.allow_tf32 = True
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
-parser.add_argument('--n_epochs', type=int, required=False, default=5)
+parser.add_argument('--n_epochs', type=int, required=False, default=1)
 parser.add_argument('--n_workers', type=int, required=False, default=28)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
@@ -51,7 +51,7 @@ parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # Thi
 parser.add_argument('--max_token_length', type=int, default=50)
 parser.add_argument('--initialize_with_text', type=str, default=False)
 parser.add_argument('--model_name', type=str, default='git')
-parser.add_argument('--fp16', type=str, default=False)
+parser.add_argument('--fp16', type=str, default=True)
 
 args = parser.parse_args()
 
@@ -178,7 +178,7 @@ def evaluate_model(model: BabyGitModel, preprocessed_images: torch.Tensor, test_
     model.eval()
     results = []
     # generated_ids = model.model.generate(pixel_values=dino_embeds, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'], max_length=50)
-    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=args.max_length) 
+    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=args.max_token_length) 
     generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
     return generated_caption, test_captions
 
@@ -246,42 +246,7 @@ else:
 epoch_iterator = tqdm(range(n_epochs))
 device_autocast = 'cuda' if torch.cuda.is_available() else 'cpu'
 for epoch in epoch_iterator:
-    if epoch % 1 == 0:
-        num_batches_val = multimodal_dataset_processor.get_num_batches_val()
-        print("Num batches val: ", num_batches_val)
-        val_iterator = tqdm(total=num_batches_val, desc='Validation')
-        print("Validating")
-        # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
-        baby_git_model.eval()
-        print("Eval mode")
-        val_loss = 0
-        val_step = 0  # Using this as a divisor to get the average loss.
-        for preprocessed_images, captions in val_dataloader:
-            try:
-                tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
-            except:
-                print("Error in tokenizing captions: ", captions)
-                print("Continuing...")
-                continue
-            input_ids = tokenized_captions['input_ids'].to(device)
-            attention_mask = tokenized_captions['attention_mask'].to(device)
-            preprocessed_images = preprocessed_images.to(device)
-
-            if args.fp16:
-                with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                    model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-                    loss = model_outputs.loss
-            else:
-                model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-                loss = model_outputs.loss
-
-            val_loss += loss.item()
-            val_iterator.update(1)
-            val_step += 1
-        wandb.log({'val_loss': val_loss / val_step})
-        print("Validation done.")
-        baby_git_model.train()
-        print("Train mode")
+    
 
     
     epoch_loss = 0
@@ -344,6 +309,43 @@ for epoch in epoch_iterator:
     epoch_iterator.set_description(f'epoch: {epoch} per_epoch_loss: {epoch_loss / batch_steps}')
     # Log the average loss.
     wandb.log({'epoch': epoch, 'per_epoch_loss': epoch_loss / batch_steps})
+
+    if epoch % 1 == 0:
+        num_batches_val = multimodal_dataset_processor.get_num_batches_val()
+        print("Num batches val: ", num_batches_val)
+        val_iterator = tqdm(total=num_batches_val, desc='Validation')
+        print("Validating")
+        # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+        baby_git_model.eval()
+        print("Eval mode")
+        val_loss = 0
+        val_step = 0  # Using this as a divisor to get the average loss.
+        for preprocessed_images, captions in val_dataloader:
+            try:
+                tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+            except:
+                print("Error in tokenizing captions: ", captions)
+                print("Continuing...")
+                continue
+            input_ids = tokenized_captions['input_ids'].to(device)
+            attention_mask = tokenized_captions['attention_mask'].to(device)
+            preprocessed_images = preprocessed_images.to(device)
+
+            if args.fp16:
+                with torch.autocast(device_type=device_autocast, dtype=torch.float16):
+                    model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                    loss = model_outputs.loss
+            else:
+                model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                loss = model_outputs.loss
+
+            val_loss += loss.item()
+            val_iterator.update(1)
+            val_step += 1
+        wandb.log({'val_loss': val_loss / val_step})
+        print("Validation done.")
+        baby_git_model.train()
+        print("Train mode")
 
 
 # Test model
