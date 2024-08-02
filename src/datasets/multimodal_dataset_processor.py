@@ -36,7 +36,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     
 
-    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=22) -> None:
+    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=22, processor=None) -> None:
 
         self.train_data_pipe: IterDataPipe = None
         self.val_data_pipe: IterDataPipe = None
@@ -99,17 +99,16 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
 
         self.device = device
-
-      
-        _, self.image_preprocessor = clip.load('ViT-B/32', device=self.device)
+        assert processor is not None
+        self.image_preprocessor = processor
+        # _, self.image_preprocessor = clip.load('ViT-B/32', device=self.device)
 
 
         # always need to first load train then load val dataset. Fix this confusing requirement later
         self.load_train_dataset()
         self.load_val_dataset()
         self.load_test_dataset()
-
-
+        
     def collate_fn(self, batch) -> tuple[Tensor, list[str]]:
         '''
         batch is a list of tuples?
@@ -129,8 +128,10 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         try:
 
 
-            imgs = tuple(self.image_preprocessor(img.convert("RGBA")) for img in imgs)
-            # imgs = tuple(self.image_preprocessor(img) for img in imgs)
+            # imgs_1 = tuple(self.image_preprocessor(images=img.convert('RGBA'), return_tensors='pt') for img in imgs)
+            # imgs_2 = tuple(self.image_preprocessor(images=img, return_tensors='pt').pixel_values for img in imgs)
+            imgs_2 = self.image_preprocessor(images=imgs, return_tensors='pt').pixel_values
+            # imgs = tuple(self.image_preprocessor(images=img, return_tensors='pt') for img in imgs)
 
         except Exception as e:
 
@@ -139,7 +140,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
             return (None, None)
 
         captions = og_captions
-        preprocessed_images = torch.stack(imgs)
+        preprocessed_images = imgs_2 # torch.stack(imgs_2)
 
         outputs1 = preprocessed_images
 
