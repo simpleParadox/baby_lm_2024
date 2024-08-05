@@ -24,10 +24,6 @@ import os
 
 import wandb
 
-from modeling_git import GitForCausalLM as BaselineGitForCausalLM # Make sure git-2024 is clone 'inside' the root directory of the project.
-from modeling_git import GitForSequenceClassification as BaselineGitForSequenceClassification
-
-
 import argparse  # This is necessary for wandb sweeps.
 
 # torch.backends.cudnn.deterministic = True
@@ -52,6 +48,8 @@ parser.add_argument('--max_token_length', type=int, default=50)
 parser.add_argument('--initialize_with_text', type=str, default=False)
 parser.add_argument('--model_name', type=str, default='git')
 parser.add_argument('--fp16', type=str, default=True)
+parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_git/')
+
 
 args = parser.parse_args()
 
@@ -145,7 +143,9 @@ if args.model_name == 'git':
     print("Loading a version of Git model")
     baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=device, 
                                 baseline_git_causal_lm=baseline_git_casual_lm, 
-                                baseline_git_sequence_classification=baseline_git_sequence_classification, initialize_with_text=args.initialize_with_text)
+                                baseline_git_sequence_classification=baseline_git_sequence_classification,
+                                initialize_with_text=args.initialize_with_text,
+                                tokenizer_path=args.tokenizer_path)
 elif args.model_name == 'flamingo':
     raise ValueError('Flamingo model not supported yet.')
 else:
@@ -247,7 +247,7 @@ else:
 #     return model_outputs
 
 # train_step = torch.compile(train_step)
-
+minimum_val_loss = np.inf
 epoch_iterator = tqdm(range(n_epochs))
 device_autocast = 'cuda' if torch.cuda.is_available() else 'cpu'
 train = False
@@ -301,16 +301,9 @@ if train:
                 wandb.log({'step': step, 'loss': epoch_loss / batch_steps})
                 wandb.log({'step': step,'running_loss': running_loss / step})
 
-        # Validate two epochs.
 
         epoch_loss /= batch_steps
 
-        if epoch_loss < best_loss and step - last_saved > min_save_every:
-            if not os.path.exists(model_save_path):
-                os.makedirs(model_save_path)
-            baby_git_model.save_model(model_save_path)
-            last_saved = epoch
-            best_loss = epoch_loss
 
         
         # Print average loss at the end of the epoch.
@@ -350,25 +343,34 @@ if train:
                 val_loss += loss.item()
                 val_iterator.update(1)
                 val_step += 1
-            wandb.log({'val_loss': val_loss / val_step})
+            current_val_loss = val_loss / val_step
+            wandb.log({'val_loss': current_val_loss})
+            
+            if current_val_loss <= minimum_val_loss:
+                if not os.path.exists(model_save_path):
+                    os.makedirs(model_save_path)
+                baby_git_model.save_model(model_save_path)
+                print("Model saved.")
+                minimum_val_loss = current_val_loss
             print("Validation done.")
             baby_git_model.train()
             print("Train mode")
 
 
+# NOTE: The following blocks is commented out for now because the 
+# generate method doesn't really work.
 # Test model
-baby_git_model.eval()
-print("Testing")
-all_generated_captions = []
-# print("Test indices: ", multimodal_dataset_processor.test_indices)
-for preprocessed_images, captions in test_dataloader:
-    generated_caption, true_captions = evaluate_model_image_caption(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
-    all_generated_captions.append([generated_caption, true_captions])
+# baby_git_model.eval()
+# print("Testing")
+# all_generated_captions = []
+# # print("Test indices: ", multimodal_dataset_processor.test_indices)
+# for preprocessed_images, captions in test_dataloader:
+#     generated_caption, true_captions = evaluate_model_image_caption(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+#     all_generated_captions.append([generated_caption, true_captions])
 
 # Save in a dataframe.
-import pandas as pd
-df = pd.DataFrame(all_generated_captions, columns=['generated_caption', 'true_captions'])
+# import pandas as pd
+# df = pd.DataFrame(all_generated_captions, columns=['generated_caption', 'true_captions'])
 
-# Save as a wandb Table.
-wandb.log({'test_results_table': wandb.Table(dataframe=df)})
-
+# # Save as a wandb Table.
+# wandb.log({'test_results_table': wandb.Table(dataframe=df)})

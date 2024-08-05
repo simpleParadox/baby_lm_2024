@@ -32,6 +32,33 @@ FORBIDDEN_URLS = [
     'sciencephoto'
 ]
 
+
+"""
+Create a text only dataloader. This part isn't a pipe because the data
+is available on disk.
+"""
+
+class GPT2Dataset(Dataset):
+
+  def __init__(self, txt_list, tokenizer, gpt2_type="gpt2", max_length=768):
+
+    self.tokenizer = tokenizer
+    self.input_ids = []
+    self.attn_masks = []
+
+    for txt in txt_list:
+
+      encodings_dict = tokenizer('<|startoftext|>'+ txt + '<|endoftext|>', truncation=True, max_length=max_length, padding="max_length")
+
+      self.input_ids.append(torch.tensor(encodings_dict['input_ids']))
+      self.attn_masks.append(torch.tensor(encodings_dict['attention_mask']))
+    
+  def __len__(self):
+    return len(self.input_ids)
+
+  def __getitem__(self, idx):
+    return self.input_ids[idx], self.attn_masks[idx] 
+
 class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     
@@ -59,14 +86,11 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
 
         # Set the split ratios
-        train_ratio = 0.8
-        val_ratio = 0.1
-        test_ratio = 0.1
+        train_ratio = 0.9
 
         # Calculate the split indices
         num_samples = len(self.full_range)
         train_end = int(train_ratio * num_samples)
-        val_end = train_end + int(val_ratio * num_samples)
 
         # Shuffle the indices to ensure randomness
         np.random.seed(manual_seed)
@@ -74,40 +98,29 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
         # Split the indices into train, val, and test sets
         self.train_indices = self.full_range[:train_end]
-        self.val_indices = self.full_range[train_end:val_end]
-        self.test_indices = self.full_range[val_end:]
+        self.val_indices = self.full_range[train_end:]
 
         # Convert the indices to lists (optional, as they are already arrays)
         self.train_indices = self.train_indices.tolist()
         self.val_indices = self.val_indices.tolist()
-        self.test_indices = self.test_indices.tolist()
-
 
         # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
         indices_train_set = set(self.train_indices)
         indices_val_set = set(self.val_indices)
-        indices_test_set = set(self.test_indices)
 
-        assert len(indices_train_set.intersection(indices_val_set, indices_test_set)) == 0
-        print("No overlap between the indices of the train, val, and test sets.")
-
-
-
-
-        
-
+        assert len(indices_train_set.intersection(indices_val_set)) == 0
+        print("No overlap between the indices of the train and val sets.")
 
 
         self.device = device
         assert processor is not None
-        self.image_preprocessor = processor
+        self.image_preprocessor = processor  # I replaced the line below with this line.
         # _, self.image_preprocessor = clip.load('ViT-B/32', device=self.device)
 
 
         # always need to first load train then load val dataset. Fix this confusing requirement later
         self.load_train_dataset()
         self.load_val_dataset()
-        self.load_test_dataset()
         
     def collate_fn(self, batch) -> tuple[Tensor, list[str]]:
         '''

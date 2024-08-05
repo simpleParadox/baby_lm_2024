@@ -49,11 +49,12 @@ class BabyGitModel(nn.Module):
         baseline_git_causal_lm=False,
         baseline_git_sequence_classification=False,
         initialize_with_text=False,
+        tokenizer_path='./src/tokenizer/multi_50m_and_captions_tokenizer_bert_wordpiece.json',
         **kwargs):
 
         super(BabyGitModel, self).__init__()
         # Initialize the class attributes here
-
+        
         
         self.device = device
         # print("Self device: ", self.device)
@@ -66,19 +67,16 @@ class BabyGitModel(nn.Module):
         self.clip_image_processor = CLIPImageProcessor(processor_config)
         # clip image processor should be ok because its just cropping and transforming the image without a learned network
 
-        # self.tokenizer = AutoTokenizer.from_pretrained("microsoft/git-base-coco")
 
-        tokenizer_path =  "./src/tokenizer/multi_50m_and_captions_tokenizer_bpe.json"
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
 
-        self.tokenizer = PreTrainedTokenizerFast(tokenizer_file=tokenizer_path, padding_side='left')
-
-        self.tokenizer.add_special_tokens(
-            {
-                'pad_token': '<pad>',
-                'sep_token': '<s>',
-                'eos_token': '</s>'
-             }
-            )
+        # self.tokenizer.add_special_tokens(
+        #     {
+        #         'pad_token': '<pad>',
+        #         'sep_token': '<s>',
+        #         'eos_token': '</s>'
+        #      }
+        #     )
         
         if initialize_with_text:
             raise NotImplementedError("Initializing with text is not implemented yet.")
@@ -102,8 +100,10 @@ class BabyGitModel(nn.Module):
         git_config.manual_seed = manual_seed
         
         if baseline_git_causal_lm and not baseline_git_sequence_classification:
+            self.model_type = "causal_lm"
             self.model = GitForCausalLM(git_config)
         elif not baseline_git_causal_lm and baseline_git_sequence_classification:
+            self.model_type = "sequence"
             self.model = GitForSequenceClassification(git_config)
         else:
             raise ValueError("Please specify either baseline_git_causal_lm or baseline_git_sequence_classification as True (but not both)")
@@ -136,12 +136,21 @@ class BabyGitModel(nn.Module):
         # pixel_values = self.processor(images=image, return_tensors="pt").pixel_values
 
         # convert images to pixel values in dataloader ig
-
-        # if pixel_values == None:
-        #     model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
-            
-        # else:
-        model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
+        
+        # The following code block is redundant because in modeling_git.py the forward method supposedly handles this internally.
+        # This is because pixel_values has a default value of None.
+        # If pixel_values are none, then it won't be conditioned on.
+        if self.model_type == "sequence":
+            if pixel_values == None:
+                model_outputs = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
+            else:
+                model_outputs = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
+        
+        elif self.model_type == "causal_lm":
+            if pixel_values == None:
+                model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
+            else:
+                model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
 
         return model_outputs
 
@@ -150,9 +159,6 @@ class BabyGitModel(nn.Module):
         self.model.save_pretrained(model_save_path)
         # print(f"Model saved at {model_save_path}")
 
-        
-    # def train(self, train_dataloader, val_dataloader, method='random', pacing='gaussian', t_total=1000):
-    #     pass
 
 
 class IdentityVisionModel(nn.Module):

@@ -1,0 +1,13 @@
+{
+  "additional_special_tokens": [
+    "<image>",
+    "<PERSON>"
+  ],
+  "pad_token": {
+    "content": "<pad>",
+    "lstrip": false,
+    "normalized": false,
+    "rstrip": false,
+    "single_word": false
+  }
+}
