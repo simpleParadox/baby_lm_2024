@@ -4,26 +4,21 @@ sys.path.append('../src/datasets')
 sys.path.append('/home/rsaha/projects/babylm/src/datasets')
 sys.path.append('/home/rsaha/projects/babylm/git-2024')
 import torch
-
+from functions import find_best_model_path
 from multimodal_dataset_processor import MultiModalDatasetProcessor
-
 from accelerate import Accelerator
-
-from models.git_base import BabyGitModel
-
+# Load the custom models from the BabyLM challenge.
+from models.git_base import BabyGitModel, BabyFlamingoModel
 from PIL import Image
 import numpy as np
-
+import json
 from torch import Tensor
-
 from torch.utils.data import DataLoader
 import random
 import datetime
 from tqdm import tqdm
 import os
-
 import wandb
-
 import argparse  # This is necessary for wandb sweeps.
 
 # torch.backends.cudnn.deterministic = True
@@ -49,9 +44,15 @@ parser.add_argument('--initialize_with_text', type=str, default=False)
 parser.add_argument('--model_name', type=str, default='git')
 parser.add_argument('--fp16', type=str, default=True)
 parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_git/')
-
+parser.add_argument('--text_init_model_path', type=str, default=None)
+parser.add_argument('--load_optimizer', type=str, default=False)
 
 args = parser.parse_args()
+
+if args.load_optimizer == False or args.load_optimizer == 'False':
+    args.load_optimizer = False
+else:
+    args.load_optimizer = True
 
 if args.do_curriculum == False or args.do_curriculum == 'False':
     args.do_curriculum = False
@@ -92,11 +93,11 @@ print("Device: ", device)
 
 
 if args.model_type == 'causal_lm':
-    baseline_git_casual_lm = True
-    baseline_git_sequence_classification = False
+    baseline_causal_lm = True
+    baseline_sequence_classification = False
 elif args.model_type == 'sequence':
-    baseline_git_casual_lm = False
-    baseline_git_sequence_classification = True
+    baseline_causal_lm = False
+    baseline_sequence_classification = True
 else:
     raise ValueError('model_type should be either causal_lm or sequence.')
 
@@ -119,17 +120,22 @@ root_level_path = os.getcwd() + '/'
 print("root_level_path: ", root_level_path)
 model_save_path = root_level_path + 'saved_models/'
 
-if args.initialize_with_text:
-    model_save_path += 'initialize_with_text/'
-
+# NOTE: best_text_init_root_path must be assigned first.
 if args.do_curriculum:
+    if args.initialize_with_text:
+        best_text_init_root_path = model_save_path + f'text_only/standard/{args.model_type}/seed_{seed}/'
     model_save_path += f'standard/{args.model_type}/seed_{seed}/'
 else:
+    if args.initialize_with_text:
+        best_text_init_root_path = model_save_path + f'text_only/curriculum/{args.model_type}/seed_{seed}/'
     model_save_path += f'curriculum/{args.model_type}/seed_{seed}/'
 
 
-
-model_save_path += f'{timestamp}_{random_dir}/best_model.pth'
+if args.initialize_with_text:
+    # Find best model path from the best_text_init_root_path.
+    args.text_init_model_path = find_best_model_path(best_text_init_root_path)
+    
+model_save_path += f'{timestamp}_{random_dir}/'
 
 print(f'model_save_path: {model_save_path}')
 wandb.log({'model_save_path': model_save_path})
@@ -141,71 +147,52 @@ wandb.log({'model_save_path': model_save_path})
 print("Loading model")
 if args.model_name == 'git':
     print("Loading a version of Git model")
-    baby_git_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=device, 
-                                baseline_git_causal_lm=baseline_git_casual_lm, 
-                                baseline_git_sequence_classification=baseline_git_sequence_classification,
+    baby_model = BabyGitModel(use_dino_embeds=False, manual_seed=seed, device=device, 
+                                baseline_causal_lm=baseline_causal_lm, 
+                                baseline_sequence_classification=baseline_sequence_classification,
                                 initialize_with_text=args.initialize_with_text,
-                                tokenizer_path=args.tokenizer_path)
+                                tokenizer_path=args.tokenizer_path,
+                                text_init_model_path=args.text_init_model_path,
+                                load_optimizer=args.load_optimizer)
 elif args.model_name == 'flamingo':
-    raise ValueError('Flamingo model not supported yet.')
+    baby_model = BabyFlamingoModel(use_dino_embeds=False, manual_seed=seed, device=device, 
+                                baseline_causal_lm=baseline_causal_lm, 
+                                baseline_sequence_classification=baseline_sequence_classification,
+                                initialize_with_text=args.initialize_with_text,
+                                tokenizer_path=args.tokenizer_path,
+                                text_init_model_path=args.text_init_model_path,
+                                load_optimizer=args.load_optimizer)
 else:
     raise ValueError('Other models not supported yet.')
 
-# baby_git_model = torch.compile(baby_git_model)
+# baby_model = torch.compile(baby_model)
 
-def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
-    '''
-    can do img.show() on returned output
-    '''
-
-    MEAN = np.array([123.675, 116.280, 103.530]) / 255
-    STD = np.array([58.395, 57.120, 57.375]) / 255
-    unnormalized_image = (image.cpu().numpy() * np.array(STD)[:, None, None]) + np.array(MEAN)[:, None, None]
-    unnormalized_image = (unnormalized_image * 255).astype(np.uint8)
-    # unnormalized_image = image.cpu().numpy().squeeze(axis=0)
-    unnormalized_image = np.moveaxis(unnormalized_image, 0, -1)
-    img = Image.fromarray(unnormalized_image)
-
-    return img
-
-def evaluate_model_image_caption(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
-
-    tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
-    img = unnormalize_image_for_display(preprocessed_images[0])
-    img.save(f'test_image_eval.png')
-    preprocessed_images = preprocessed_images.to(device)
-
-    
-    # model.eval()
-    model.model.eval()
-    results = []
-    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=80)
-    # generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=args.max_token_length, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
-    # generated_ids = model.model.generate(pixel_values=res, max_length=args.max_token_length)
-    generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    return generated_caption, test_captions
 
 
 print("-- initializing -- ")
 print("Loading optimizer")
 optimizer = None
+
+
 if args.optimizer == 'adamw':
-    optimizer = torch.optim.AdamW(baby_git_model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(baby_model.parameters(), lr=lr)
 elif args.optimizer == 'adam':
-    optimizer = torch.optim.Adam(baby_git_model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(baby_model.parameters(), lr=lr)
 elif args.optimizer == 'sgd':
-    optimizer = torch.optim.SGD(baby_git_model.parameters(), lr=lr)
+    optimizer = torch.optim.SGD(baby_model.parameters(), lr=lr)
 
+if args.load_optimizer:
+    optimizer.load_state_dict(baby_model.optimizer_state_dict)
 
-baby_git_model.to(device).train()
+baby_model.to(device).train()
 # print("Model loaded")
-# print(baby_git_model)
+# print(baby_model)
 
 
 print("Loading dataset processor")
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
                                                           n_workers=n_workers, device=device,
-                                                          processor=baby_git_model.processor)
+                                                          processor=baby_model.processor)
 
 best_loss = np.inf
 last_saved = -1
@@ -218,8 +205,8 @@ test_captions = None
 
 # Use the prepare method from accelerator to prepare the pytorch objects.
 if args.use_accelerate:
-    baby_git_model, optimizer, training_dataloader = accelerator.prepare(
-        baby_git_model, optimizer, multimodal_dataset_processor.train_dataloader
+    baby_model, optimizer, training_dataloader = accelerator.prepare(
+        baby_model, optimizer, multimodal_dataset_processor.train_dataloader
     )
 else:
     training_dataloader = multimodal_dataset_processor.train_dataloader
@@ -238,8 +225,8 @@ if args.fp16:
 else:
     scaler = None
 # @torch.compile
-# def train_step(baby_git_model, preprocessed_images, optimizer, input_ids, attention_mask):
-#     model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+# def train_step(baby_model, preprocessed_images, optimizer, input_ids, attention_mask):
+#     model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
 #     loss = model_outputs.loss
 #     loss.backward()
 #     optimizer.step()
@@ -265,7 +252,7 @@ if train:
             optimizer.zero_grad()
 
             try:
-                tokenized_captions = baby_git_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+                tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
             except:
                 print("Error in tokenizing captions: ", captions)
                 continue
@@ -276,13 +263,13 @@ if train:
             
             if args.fp16:
                 with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                    model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                    model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
                     loss = model_outputs.loss
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
                 loss = model_outputs.loss
                 loss.backward()
                 optimizer.step()
@@ -316,14 +303,14 @@ if train:
             print("Num batches val: ", num_batches_val)
             val_iterator = tqdm(total=num_batches_val, desc='Validation')
             print("Validating")
-            # evaluate_model(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
-            baby_git_model.eval()
+            # evaluate_model(model=baby_model, preprocessed_images=preprocessed_images, test_captions=captions)
+            baby_model.eval()
             print("Eval mode")
             val_loss = 0
             val_step = 0  # Using this as a divisor to get the average loss.
             for preprocessed_images, captions in val_dataloader:
                 try:
-                    tokenized_captions = baby_git_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+                    tokenized_captions = baby_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
                 except:
                     print("Error in tokenizing captions: ", captions)
                     print("Continuing...")
@@ -334,10 +321,10 @@ if train:
 
                 if args.fp16:
                     with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                        model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                        model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
                         loss = model_outputs.loss
                 else:
-                    model_outputs = baby_git_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                    model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
                     loss = model_outputs.loss
 
                 val_loss += loss.item()
@@ -349,23 +336,29 @@ if train:
             if current_val_loss <= minimum_val_loss:
                 if not os.path.exists(model_save_path):
                     os.makedirs(model_save_path)
-                baby_git_model.save_model(model_save_path)
+                baby_model.save_model(model_save_path)
                 print("Model saved.")
                 minimum_val_loss = current_val_loss
+                wandb.log({'min_val_loss': minimum_val_loss})
+                args_dict['min_val_loss'] = current_val_loss
+                # Save the args_dict in the same directory as json.
+                with open(model_save_path + 'args.json', 'w') as f:
+                    json.dump(args_dict, f)
+                    print("Args saved.")
             print("Validation done.")
-            baby_git_model.train()
+            baby_model.train()
             print("Train mode")
 
 
 # NOTE: The following blocks is commented out for now because the 
 # generate method doesn't really work.
 # Test model
-# baby_git_model.eval()
+# baby_model.eval()
 # print("Testing")
 # all_generated_captions = []
 # # print("Test indices: ", multimodal_dataset_processor.test_indices)
 # for preprocessed_images, captions in test_dataloader:
-#     generated_caption, true_captions = evaluate_model_image_caption(model=baby_git_model, preprocessed_images=preprocessed_images, test_captions=captions)
+#     generated_caption, true_captions = evaluate_model_image_caption(model=baby_model, preprocessed_images=preprocessed_images, test_captions=captions)
 #     all_generated_captions.append([generated_caption, true_captions])
 
 # Save in a dataframe.

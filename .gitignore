@@ -53,6 +53,7 @@ test/evaluation-pipeline-2024/
 
 BabyBERTa/
 git-2024/
+flamingo-2024/
 wandb/
 
 pos_tagging_dataset_no_duplicates.csv

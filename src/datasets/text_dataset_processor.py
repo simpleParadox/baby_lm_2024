@@ -1,71 +1,100 @@
-import clip
+from tqdm import tqdm
 import torch
 import random
-from torch.utils.data import DataLoader, Subset
-from datasets.dataset_processor_parent import DatasetProcessorParent
+from torch.utils.data import DataLoader
+import sys
+sys.path.append('/home/rsaha/projects/babylm/src/datasets')
+from dataset_processor_parent import DatasetProcessorParent
 
 from torch.utils.data import Dataset
 import numpy as np
 
-import torchdata.datapipes as dp
 
-import aiohttp
-from PIL import Image
-import io
-from typing import Optional
-from torchdata.datapipes.iter import IterDataPipe
-# import Generator
-from typing import Generator, List, Tuple, Sequence
-import asyncio
-
-from torch import Tensor
-
+import pandas as pd
 from pathlib import Path
 
 class TextDatasetProcessor(DatasetProcessorParent):
 
-    def __init__(self, cuda_device='cuda:0', batch_size=64, dataset_size=-1, root='src/datasets/osf/text_data') -> None:
-
+    def __init__(self, device='cuda:0', batch_size=64,
+                 root='./', manual_seed=42,
+                 n_workers=20, processor=None, dataset_size=-1) -> None:
         '''
-        Outputs captions as list of original UNTokenized captions
+        Create a dataloader using only the non-caption data.
         '''
 
         self.train_dataset: Dataset = None
         self.train_dataloader = None
         self.val_dataset: Dataset = None
         self.val_dataloader = None
-
-        self.train_data_pipe: IterDataPipe = None
-        self.val_data_pipe: IterDataPipe = None
-
         self.root = root
-
-        self.dataset_size = dataset_size
-        
         self.batch_size = batch_size
-
-        file = 'asd.asd.asd'.split()
-
+        self.val_batch_size = 8
+        self.test_batch_size = 8
+        self.n_workers = n_workers
+        self.val_n_workers = 28
+        self.manual_seed = manual_seed
         self.train_strings: list[str] = None
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        self.DATA_ROOT = Path(root)
+        self.data_dir = Path("./data/train_50M_multimodal_clean/")
+        self.train_file_paths: list[str] = [str(f) for f in self.data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and (f.name not in ["cc_3M_captions_reduced.train", "local_narr_captions.train"])]
+        
+        
+        
+        # For each path, read the lines.
+        # Then, concatenate all the lines into a single list.
+        texts = []
+        for path in tqdm(self.train_file_paths):
+            with open(path, 'r') as f:
+                data = f.readlines()
+                for line in tqdm(data):
+                    texts.append(line)
+                    
+        self.texts = texts
+        
+        self.full_range = np.arange(0, len(texts))  # 2851072 is the number of samples in the all_multimodal.tsv file.
+        
 
-        self.device = torch.device(cuda_device if torch.cuda.is_available() else "cpu")
+        # Set the split ratios
+        train_ratio = 0.9
 
-        self.train_root = Path(root + '/train_100M/')
+        # Calculate the split indices
+        num_samples = len(self.full_range)
+        train_end = int(train_ratio * num_samples)
 
-        self.train_file_paths: list[str] = [str(f) for f in self.train_root.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
+        # Shuffle the indices to ensure randomness
+        np.random.seed(manual_seed)
+        np.random.shuffle(self.full_range)
 
-        self.val_root = Path(root + '/dev/')
+        # Split the indices into train, val, and test sets
+        self.train_indices = self.full_range[:train_end]
+        self.val_indices = self.full_range[train_end:]
 
-        self.val_file_paths = [str(f) for f in self.val_root.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".dev"]]
+        # Convert the indices to lists (optional, as they are already arrays)
+        self.train_indices = self.train_indices.tolist()
+        self.val_indices = self.val_indices.tolist()
 
+        # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
+        indices_train_set = set(self.train_indices)
+        indices_val_set = set(self.val_indices)
 
+        assert len(indices_train_set.intersection(indices_val_set)) == 0
+        print("No overlap between the indices of the train and val sets.")
+        
+        self.processor = processor 
 
-    
-        # always need to first load train then load val dataset. Fix this confusing requirement later
+        self.create_train_val_dataloaders() # Create train and val dataloaders.
+        
         self.load_train_dataset()
         self.load_val_dataset()
-
-
+        
+    def load_train_dataset(self):
+        self.train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
+        
+    def load_val_dataset(self):
+        self.val_dataloader = DataLoader(self.val_dataset, batch_size=self.val_batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
+        
+        
     def collate_fn(self, batch) -> list[str]:
         '''
         batch is a list of tuples?
@@ -84,10 +113,11 @@ class TextDatasetProcessor(DatasetProcessorParent):
         return outputs2
 
 
-    def get_num_batches(self) -> int:
-
-        return 3318333 // self.batch_size
-        return len(self.train_dataloader)
+    def get_num_batches_train(self) -> int:
+        return len(self.train_indices) // self.batch_size
+    
+    def get_num_batches_val(self) -> int:
+        return len(self.val_indices) // self.val_batch_size
     
     @staticmethod
     def seed_dataloader_worker(worker_id):
@@ -96,37 +126,23 @@ class TextDatasetProcessor(DatasetProcessorParent):
         random.seed(worker_seed)
 
 
-
-
-    def load_train_dataset(self):
-
-        batch_size = self.batch_size
-
-        self.train_strings = [open(path).read().split('\n') for path in self.train_file_paths]
-
+    def create_train_val_dataloaders(self):
         
-
+        # The only reason to create this dataframe is to select the rows that are in the train_indices.
+        # I could use a list comprehension, but this is just cleaner (could take more memory though).
+        df = pd.DataFrame(self.texts, columns=['text'])
         
-
-        self.train_strings: list[str] = sum(self.train_strings, [])
-
-        # remove empty strings
+        # Select the rows that are in the train_indices
+        self.train_strings = df.iloc[self.train_indices]['text'].tolist()
+        
+        self.val_strings = df.iloc[self.val_indices]['text'].tolist()
+        
         self.train_strings = [x for x in self.train_strings if x]
+        self.val_strings = [x for x in self.val_strings if x]
 
         self.train_dataset = TextDataset(self.train_strings)
-
-
-        self.train_dataloader = DataLoader(self.train_dataset, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=0, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(22))
-
-    def load_val_dataset(self):
-
-        self.val_strings = [open(path).read().split('\n') for path in self.val_file_paths]
-
-        self.val_strings: list[str] = sum(self.val_strings, [])
-
         self.val_dataset = TextDataset(self.val_strings)
 
-        
 
 
     def print_dataset_stats(self):
@@ -134,17 +150,11 @@ class TextDatasetProcessor(DatasetProcessorParent):
         print()
         print('--- TRAIN DATASET STATS ---')
         print()
-
-        print('no of train samples: ', 3318333)
-
+        print('no of train samples: ', len(self.train_dataset))
         print()
         print('--- VAL DATASET STATS ---')
         print()
-
-
-        print('no of val samples: ', 15840)
-
-
+        print('no of val samples: ', len(self.val_dataset))
 
 
 
