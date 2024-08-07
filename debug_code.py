@@ -1,10 +1,17 @@
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer
 import requests
 from PIL import Image
 
-processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
-model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")
+processor = AutoProcessor.from_pretrained("microsoft/git-base")
+model = AutoModelForCausalLM.from_pretrained("microsoft/git-base")
 
+# Load the tokenizer.
+tokenizer = AutoTokenizer.from_pretrained("microsoft/git-base")
+
+# Save the model in a directory.
+model.save_pretrained("/home/rsaha/projects/babylm/pretrained_from_hf/pretrained_git_ms_model/")
+tokenizer.save_pretrained("/home/rsaha/projects/babylm/pretrained_from_hf/pretrained_git_ms_model/")
+processor.save_pretrained("/home/rsaha/projects/babylm/pretrained_from_hf/pretrained_git_ms_model/")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 

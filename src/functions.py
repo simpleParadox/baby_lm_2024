@@ -1,3 +1,7 @@
+import torch
+from PIL import Image
+import numpy as np
+
 def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
     '''
     can do img.show() on returned output
@@ -13,26 +17,22 @@ def unnormalize_image_for_display(image: torch.Tensor) -> Image.Image:
 
     return img
 
-def evaluate_model_image_caption(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
+# def evaluate_model_image_caption(model: BabyGitModel, preprocessed_images: torch.Tensor, test_captions: list[str]):
 
-    tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
-    img = unnormalize_image_for_display(preprocessed_images[0])
-    img.save(f'test_image_eval.png')
-    preprocessed_images = preprocessed_images.to(device)
+#     tokenized_captions = model.tokenizer(test_captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+#     img = unnormalize_image_for_display(preprocessed_images[0])
+#     img.save(f'test_image_eval.png')
+#     preprocessed_images = preprocessed_images.to(device)
 
     
-    # model.eval()
-    model.model.eval()
-    results = []
-    generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=80)
-    # generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=args.max_token_length, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
-    # generated_ids = model.model.generate(pixel_values=res, max_length=args.max_token_length)
-    generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    return generated_caption, test_captions
-
-
-
-
+#     # model.eval()
+#     model.model.eval()
+#     results = []
+#     generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=80)
+#     # generated_ids = model.model.generate(pixel_values=preprocessed_images, max_length=args.max_token_length, input_ids=tokenized_captions['input_ids'], attention_mask=tokenized_captions['attention_mask'])
+#     # generated_ids = model.model.generate(pixel_values=res, max_length=args.max_token_length)
+#     generated_caption = model.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    # return generated_caption, test_captions
 
 
 def find_best_model_path(top_level_path):
