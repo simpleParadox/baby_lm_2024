@@ -12,7 +12,7 @@ parameters:
   n_epochs:
     values: [5]
   min_save_every:
-    values: [200]
+    values: [1]
   n_workers:
     values: [25]
   optimizer:
@@ -37,6 +37,7 @@ parameters:
     values: [True]
   tokenizer_path:
     values: ['./src/tokenizer/hf_wordpiece_tokenizer_from_git/']
+    #values: ['./src/tokenizer/hf_wordpiece_tokenizer_from_flamingo/']
   text_init_model_path:
     values: [None]
   load_optimizer:

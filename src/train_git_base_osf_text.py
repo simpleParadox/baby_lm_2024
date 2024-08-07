@@ -79,6 +79,13 @@ if args.fp16 == False or args.fp16 == 'False':
 else:
     args.fp16 = True
 
+# Check tokenizer path for correct model.
+if args.model_name == 'git':
+    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_git/'
+elif args.model_name == 'flamingo':
+    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_flamingo/'
+
+
 batch_size = args.batch_size
 dataset_size = args.dataset_size # negative for full dataset
 n_epochs=args.n_epochs
@@ -282,7 +289,7 @@ if train:
         # Log the average loss.
         wandb.log({'epoch': epoch, 'per_epoch_loss': epoch_loss / batch_steps})
 
-        if epoch % 1 == 0:
+        if epoch % min_save_every == 0:
             num_batches_val = text_dataset_processor.get_num_batches_val()
             print("Num batches val: ", num_batches_val)
             val_iterator = tqdm(total=num_batches_val, desc='Validation')
