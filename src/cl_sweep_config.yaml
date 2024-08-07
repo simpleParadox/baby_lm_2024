@@ -16,7 +16,7 @@ parameters:
   n_workers:
     values: [30]
   optimizer:
-    values: ["adamw"]
+    values: ["adam"]
   dataset_size:
     values: [-1]
   seed:

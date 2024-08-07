@@ -27,7 +27,7 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, required=False, default=4)
+parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=1)
 parser.add_argument('--n_workers', type=int, required=False, default=28)
