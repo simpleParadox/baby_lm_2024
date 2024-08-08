@@ -10,11 +10,11 @@ parameters:
   batch_size:
     values: [256]
   n_epochs:
-    values: [5]
+    values: [20]
   min_save_every:
     values: [1]
   n_workers:
-    values: [25]
+    values: [28]
   optimizer:
     values: ["adam"]
   dataset_size:

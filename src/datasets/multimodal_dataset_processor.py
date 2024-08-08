@@ -63,7 +63,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     
 
-    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=22, processor=None) -> None:
+    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=42, processor=None) -> None:
 
         self.train_data_pipe: IterDataPipe = None
         self.val_data_pipe: IterDataPipe = None

@@ -192,7 +192,7 @@ baby_model.to(device).train()
 print("Loading dataset processor")
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
                                                           n_workers=n_workers, device=device,
-                                                          processor=baby_model.processor)
+                                                          processor=baby_model.processor, manual_seed=seed)
 
 best_loss = np.inf
 last_saved = -1

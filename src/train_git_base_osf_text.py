@@ -32,11 +32,11 @@ torch.backends.cudnn.allow_tf32 = True
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=256)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
-parser.add_argument('--n_epochs', type=int, required=False, default=5)
+parser.add_argument('--n_epochs', type=int, required=False, default=15)
 parser.add_argument('--n_workers', type=int, required=False, default=20)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
-parser.add_argument('--lr', type=float, required=False, default=5e-5)
+parser.add_argument('--lr', type=float, required=False, default=1e-5)
 parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
 parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard fine-tuning.
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
@@ -51,7 +51,6 @@ parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
 
 args = parser.parse_args()
-
 if args.load_optimizer == False or args.load_optimizer == 'False':
     args.load_optimizer = False
 else:
@@ -195,7 +194,7 @@ baby_model.to(device).train()
 
 text_dataset_processor = TextDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
                                                           n_workers=n_workers, device=device,
-                                                          processor=baby_model.processor)
+                                                          processor=baby_model.processor, manual_seed=seed)
 
 best_loss = np.inf
 last_saved = -1
