@@ -2,11 +2,11 @@ from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer
 import requests
 from PIL import Image
 
-processor = AutoProcessor.from_pretrained("microsoft/git-base")
-model = AutoModelForCausalLM.from_pretrained("microsoft/git-base")
+processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
+model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")
 
 # Load the tokenizer.
-tokenizer = AutoTokenizer.from_pretrained("microsoft/git-base")
+tokenizer = AutoTokenizer.from_pretrained("microsoft/git-base-coco")
 
 # Save the model in a directory.
 model.save_pretrained("/home/rsaha/projects/babylm/pretrained_from_hf/pretrained_git_ms_model/")

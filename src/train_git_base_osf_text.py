@@ -278,7 +278,6 @@ if train:
             if step % 100 == 0:
                 wandb.log({'step': step, 'loss': epoch_loss / batch_steps})
                 wandb.log({'step': step,'running_loss': running_loss / step})
-                break
 
 
         epoch_loss /= batch_steps
