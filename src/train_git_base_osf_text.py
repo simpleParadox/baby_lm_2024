@@ -275,9 +275,10 @@ if train:
             batch_steps += 1
 
             # Log the loss every 50 steps.
-            if step % 50 == 0:
+            if step % 100 == 0:
                 wandb.log({'step': step, 'loss': epoch_loss / batch_steps})
                 wandb.log({'step': step,'running_loss': running_loss / step})
+                break
 
 
         epoch_loss /= batch_steps
@@ -294,7 +295,6 @@ if train:
             print("Num batches val: ", num_batches_val)
             val_iterator = tqdm(total=num_batches_val, desc='Validation')
             print("Validating")
-            # evaluate_model(model=baby_model, preprocessed_images=preprocessed_images, test_captions=captions)
             baby_model.eval()
             print("Eval mode")
             val_loss = 0
@@ -308,16 +308,14 @@ if train:
                     continue
                 input_ids = tokenized_data['input_ids'].to(device)
                 attention_mask = tokenized_data['attention_mask'].to(device)
-                preprocessed_images = preprocessed_images.to(device)
 
                 if args.fp16:
                     with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                        model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                        model_outputs = baby_model(input_ids=input_ids, attention_mask=attention_mask)
                         loss = model_outputs.loss
                 else:
-                    model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                    model_outputs = baby_model(input_ids=input_ids, attention_mask=attention_mask)
                     loss = model_outputs.loss
-
                 val_loss += loss.item()
                 val_iterator.update(1)
                 val_step += 1

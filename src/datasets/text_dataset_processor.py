@@ -28,8 +28,7 @@ class TextDatasetProcessor(DatasetProcessorParent):
         self.val_dataloader = None
         self.root = root
         self.batch_size = batch_size
-        self.val_batch_size = 8
-        self.test_batch_size = 8
+        self.val_batch_size = 128
         self.n_workers = n_workers
         self.val_n_workers = 28
         self.manual_seed = manual_seed
