@@ -234,4 +234,4 @@ for seed in SEEDS:
                 f.write("\n\n")
             
             # Save the model as a joblib file.
-            dump(penn_crf, f"/home/rsaha/projects/babylm/src/taggers/models/pos_tagger_model_seed_{seed}_c{}.joblib")
+            dump(penn_crf, f"/home/rsaha/projects/babylm/src/taggers/models/pos_tagger_model_seed_{seed}_c1_{c1}_c2_{c2}.joblib")
