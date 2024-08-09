@@ -1,7 +1,9 @@
 from transformers import AutoProcessor, AutoModelForCausalLM
 
-processor = AutoProcessor.from_pretrained("babylm/git-2024", trust_remote_code=True)
+# processor = AutoProcessor.from_pretrained("babylm/git-2024", trust_remote_code=True)
+processor = AutoProcessor.from_pretrained("microsoft/git-base")
 tokenizer = processor.tokenizer
+print("Tokenizer: ", tokenizer)
 from pathlib import Path
 # From the paths variable, create a new pandas with one column called 'text'.
 # For each path in paths, read the file and append the text to the 'text' column.
@@ -24,8 +26,8 @@ DATA_ROOT = Path("./")
 
 data_dir = Path("./data/train_50M_multimodal_clean/") # Make sure the path is correct here.
 
-# paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
-paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and (f.name in ["cc_3M_captions_reduced.train", "local_narr_captions.train"])]
+paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
+# paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and (f.name not in ["cc_3M_captions_reduced.train", "local_narr_captions.train"])]
 print(paths)
 
 
@@ -58,5 +60,5 @@ def get_training_corpus():
 training_corpus = get_training_corpus()
 # Train 
 tokenizer.train_new_from_iterator(training_corpus, vocab_size=32768)
-tokenizer.save_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_wordpiece_tokenizer_from_git/")
+tokenizer.save_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/")
 # tokenizer.train_new_from_iterator(get_training_corpus, vocab_size=30522, min_frequency=2, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
