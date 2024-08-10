@@ -1,4 +1,4 @@
-program: reimplementation_kaggle_bert_pos_tagging.py
+program: src/taggers/reimplementation_kaggle_bert_pos_tagging.py
 name: tagger_train_bert_from_scratch_pretrained_config
 method: grid
 metric:

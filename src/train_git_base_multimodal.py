@@ -285,7 +285,7 @@ if train:
 
             # Log the loss every 50 steps.
             if step % 50 == 0:
-                wandb.log({'step': step, 'loss': epoch_loss / batch_steps})
+                wandb.log({'step': step, 'epoch_loss': epoch_loss / batch_steps})
                 wandb.log({'step': step,'running_loss': running_loss / step})
 
 

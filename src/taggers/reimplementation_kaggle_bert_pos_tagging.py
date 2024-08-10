@@ -12,6 +12,7 @@ from nltk.data import load as nltk_load
 import json
 import wandb
 import argparse
+import torch
 # %% [markdown]
 # Create a huggingface Dataset from the stored sentence and pos tag data.
 
@@ -21,6 +22,13 @@ parser.add_argument("--num_train_epochs", type=int, default=20, help="The number
 parser.add_argument("--seed", type=int, default=0, help="The seed for the random number generator.")
 
 args = parser.parse_args()
+
+
+
+torch.manual_seed(args.seed)
+torch.cuda.manual_seed(args.seed)
+torch.backends.cudnn.deterministic = True  
+torch.backends.cudnn.benchmark = False
 
 
 
@@ -115,7 +123,7 @@ for path in tqdm(paths, desc="Paths"):
 data = []
 for file_name in tqdm(file_names):
     print(file_name)
-    # if file_name == "pos_tagging_dataset_all_sentences_open_subtitles": # for testing.
+    # if file_name in ["pos_tagging_dataset_all_sentences_open_subtitles", "pos_tagging_dataset_all_sentences_switchboard"]:
     temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data/{file_name}.pkl", "rb"))
     data.extend(temp_data)
 
@@ -256,9 +264,9 @@ def tokenize_and_align_labels(examples):
 
 # %%
 df_dataset_tokenized_train = df_dataset_train.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=20)
+                                      remove_columns=df_dataset_train.column_names, num_proc=29)
 df_dataset_tokenized_eval = df_dataset_val.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=20)
+                                      remove_columns=df_dataset_train.column_names, num_proc=29)
 
 # %%
 # Figure out which of the labels array in each element of df_dataset_tokenized_train contains 46.
@@ -334,9 +342,11 @@ train_dataloader = DataLoader(
     shuffle=True,
     collate_fn=data_collator,
     batch_size=batch_size,
+    num_workers=28
 )
 eval_dataloader = DataLoader(
-    df_dataset_tokenized_eval, collate_fn=data_collator, batch_size=batch_size
+    df_dataset_tokenized_eval, collate_fn=data_collator, batch_size=batch_size,
+    num_workers=28
 )
 
 # %% [markdown]
@@ -358,7 +368,6 @@ accelerator = Accelerator(mixed_precision="fp16")
 model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
     model, optimizer, train_dataloader, eval_dataloader
 )
-import torch
 scaler = torch.cuda.amp.GradScaler(enabled=True)
 
 # %%
@@ -395,17 +404,19 @@ def postprocess(predictions, labels):
 seed = args.seed
 # %%
 from tqdm.auto import tqdm
-import torch
 
 progress_bar = tqdm(range(num_training_steps))
 min_val_loss = np.inf
 global_step = 0
+running_loss = 0.0
 for epoch in tqdm(range(num_train_epochs)):
     # Training
     model.train()
     for batch in train_dataloader:
         outputs = model(**batch)
         loss = outputs.loss
+        running_loss += loss.item()
+        
         accelerator.backward(loss)
 
         optimizer.step()
@@ -415,7 +426,9 @@ for epoch in tqdm(range(num_train_epochs)):
         global_step += 1
 
         if global_step % 100 == 0:
-            wandb.log({"train_loss": loss.item() / global_step, "global_step": global_step})
+            wandb.log({"train_loss": running_loss / global_step})
+    
+    wandb.log({"epoch_loss": running_loss / global_step, "epoch": epoch})
     # Evaluation
     model.eval()
     eval_loss = 0.0
@@ -437,7 +450,7 @@ for epoch in tqdm(range(num_train_epochs)):
         true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
         metric.add_batch(predictions=true_predictions, references=true_labels)
     
-    wandb.log({"val_loss": eval_loss / len(eval_dataloader)}) # Just usign the the len(eval_dataloader) is fine because the loss is already averaged over the number of batches.
+    wandb.log({"val_loss": eval_loss / len(eval_dataloader), "epoch": epoch}) # Just using the the len(eval_dataloader) is fine because the loss is already averaged over the number of batches.
 
     results = metric.compute()
     print(
@@ -447,6 +460,8 @@ for epoch in tqdm(range(num_train_epochs)):
             for key in ["precision", "recall", "f1", "accuracy"]
         },
     )
+    # Create a dictionary from the results.
+    results_dict = {key: results[f"overall_{key}"] for key in ["precision", "recall", "f1", "accuracy"]}
     
     # Save the model checkpoint for each epoch.
     # Save after every five epochs.
@@ -456,6 +471,9 @@ for epoch in tqdm(range(num_train_epochs)):
     if eval_loss < min_val_loss:
         min_loss = eval_loss
         args = {"min_val_loss": min_val_loss, "epoch": epoch}
+        
+        # Add the results_dict to the args dictionary.
+        args.update(results_dict)
         # Save the best model.
         model.save_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/best_model/")
         json.dump(args, open(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/args.json", "w"))
