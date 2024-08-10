@@ -1,0 +1,13 @@
+program: reimplementation_kaggle_bert_pos_tagging.py
+name: tagger_train_bert_from_scratch_pretrained_config
+method: grid
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  batch_size:
+    values: [512]
+  num_train_epochs:
+    values: [20]
+  seed:
+    values: [0, 1, 2, 3, 4]
