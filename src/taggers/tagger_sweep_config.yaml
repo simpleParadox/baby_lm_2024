@@ -8,6 +8,6 @@ parameters:
   batch_size:
     values: [512]
   num_train_epochs:
-    values: [20]
+    values: [5]
   seed:
     values: [0, 1, 2, 3, 4]

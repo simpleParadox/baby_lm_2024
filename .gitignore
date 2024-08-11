@@ -68,3 +68,6 @@ src/taggers/processed_tagger_data/
 /src/taggers/logs/
 pretrained_from_hf/
 scripts.sh
+
+
+/src/taggers/bert-base-uncased_tagger_checkpoints*
