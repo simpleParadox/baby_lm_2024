@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="Train a BERT POS Tagger from scrat
 parser.add_argument("--batch_size", type=int, default=512, help="The batch size for training.")
 parser.add_argument("--num_train_epochs", type=int, default=20, help="The number of training epochs.")
 parser.add_argument("--seed", type=int, default=0, help="The seed for the random number generator.")
-parser.add_argument('--test_run', action='store_true', help="Whether to run the script in test mode.")
+parser.add_argument('--test_run', action='store_true', help="Whether to run the script in test mode.") # Default value is False.
 args = parser.parse_args()
 
 
@@ -35,6 +35,7 @@ torch.backends.cudnn.benchmark = False
 
 
 wandb.init(project="train_bert_pos_tagger")
+# wandb.init(project="train_bert_pos_tagger", mode='disabled')
 
 data_dir = Path("/home/rsaha/projects/babylm/src/taggers/data/")
 paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"]]
@@ -112,11 +113,22 @@ def align_labels_with_tokens(labels, word_ids):
     return new_labels
 
 # %%
+unk_count = 0
 def tokenize_and_align_labels(examples):
     # print("Example sentence:  ", examples["sentence"])
     tokenized_inputs = tokenizer(
         examples["sentence"], truncation=True, is_split_into_words=True, max_length=50
     )
+    split_tokenized_inputs = [
+        tokenizer.tokenize(e, truncation=True, 
+                           is_split_into_words=True, 
+                           max_length=5, 
+                           add_special_tokens=True) for e in examples['sentence']]
+    # Increase unk_count if the tokenized inputs contain [UNK]
+    global unk_count
+    for split in split_tokenized_inputs:
+        if "[UNK]" in split:
+            unk_count += 1
     all_labels = examples["class_labels"]
     new_labels = []
     for i, labels in enumerate(all_labels):
@@ -128,9 +140,9 @@ def tokenize_and_align_labels(examples):
     return tokenized_inputs
 
 df_dataset_tokenized_train = df_dataset_train.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=20)
+                                      remove_columns=df_dataset_train.column_names, num_proc=1)
 df_dataset_tokenized_eval = df_dataset_val.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=20)
+                                      remove_columns=df_dataset_train.column_names, num_proc=1)
 
 
 
@@ -147,7 +159,6 @@ teacher_model = AutoModelForTokenClassification.from_pretrained(model_checkpoint
 model = AutoModelForTokenClassification.from_config(
     teacher_model.config,
 )
-
 
 import evaluate
 
@@ -181,11 +192,11 @@ train_dataloader = DataLoader(
     shuffle=True,
     collate_fn=data_collator,
     batch_size=batch_size,
-    num_workers=10
+    num_workers=2
 )
 eval_dataloader = DataLoader(
     df_dataset_tokenized_eval, collate_fn=data_collator, batch_size=batch_size,
-    num_workers=28
+    num_workers=2
 )
 
 from torch.optim import AdamW, Adam

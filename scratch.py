@@ -1,26 +1,35 @@
 import pandas as pd
-from datasets import load_dataset
 import json
 
 
+
+# Read in the following file as a text file and create a list for each line.
+# /home/rsaha/projects/babylm/data/train_50M_multimodal_clean/local_narr_captions.train
+
+local_narr_captions = open("/home/rsaha/projects/babylm/data/train_50M_multimodal_clean/local_narr_captions.train", "r").readlines()
+
+
+
 # Count the number of words in the captions for conceptual captions dataset.
-cc_3m_training_exists = pd.read_csv("cc_3m_training_exists/concatenated_training_exists_with_captions.tsv", sep="\t", compression='gzip')
+file_path = "oncatenated_training_exists_with_captions_non_reduced_filtered.tsv"
+cc_3m_training_exists = pd.read_csv(file_path, sep="\t", compression='gzip')
 
 
 
-# Select the rows only where exists=1.
+# Select the rows only where exists=1, because some rows also contain 0.
 cc_3m_training_exists_filtered = cc_3m_training_exists[cc_3m_training_exists['exists'] == 1]
 
 
+print("Number of rows in the filtered dataframe before dropping rows: ", cc_3m_training_exists_filtered.shape[0])
 
-# Randomly drop 8% of the rows.
-cc_3m_training_exists_filtered = cc_3m_training_exists_filtered.sample(frac=0.92, random_state=42)
+# Randomly drop 3% of the rows.
+cc_3m_training_exists_filtered_reduced = cc_3m_training_exists_filtered.sample(frac=0.97, random_state=42)
 
 # Print the number of rows.
-print("Number of rows in the filtered dataframe: ", cc_3m_training_exists_filtered.shape[0])
+print("Number of rows in the filtered dataframe reduced: ", cc_3m_training_exists_filtered_reduced.shape[0])
 
 # Save the filtered dataframe to a tsv file.
-cc_3m_training_exists_filtered.to_csv("cc_3m_training_exists/concatenated_training_exists_with_captions_reduced.tsv", sep="\t", index=False, compression='gzip')
+cc_3m_training_exists_filtered.to_csv("cc_3m_training_exists/concatenated_training_exists_with_captions_non_reduced.tsv", sep="\t", index=False, compression='gzip')
 
 # Create a list with all the captions from the filtered dataframe.
 existing_captions = cc_3m_training_exists_filtered['caption'].tolist()
@@ -29,9 +38,9 @@ existing_captions = cc_3m_training_exists_filtered['caption'].tolist()
 existing_captions_string = " ".join(existing_captions)
 
 # Count the number of words in the string.
-number_of_words = len(existing_captions_string.split())
+number_of_words = len(existing_captions_string.split(" "))
 print("Number of words in the captions for the conceptual captions dataset: ", number_of_words)
-
+from pathlib import Path
 DATA_ROOT = Path("./")
 split = 'caption_data'
 INPUT_DIR = DATA_ROOT / 'data' / split
@@ -39,7 +48,7 @@ OUTPUT_DIR = DATA_ROOT / 'data' / f'{split}_multimodal_clean'
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-new_file_name = 'cc_3M_captions_reduced' + ".train"
+new_file_name = 'cc_3M_captions_reduced_97' + ".train"
 all_captions = '\n'.join(existing_captions)
 
 (OUTPUT_DIR / new_file_name).write_text(all_captions)
