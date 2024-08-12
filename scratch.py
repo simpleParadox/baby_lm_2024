@@ -11,7 +11,7 @@ local_narr_captions = open("/home/rsaha/projects/babylm/data/train_50M_multimoda
 
 
 # Count the number of words in the captions for conceptual captions dataset.
-file_path = "oncatenated_training_exists_with_captions_non_reduced_filtered.tsv"
+file_path = "/home/rsaha/projects/babylm/cc_3m_training_exists/concatenated_training_exists_with_captions_non_reduced_filtered.tsv"
 cc_3m_training_exists = pd.read_csv(file_path, sep="\t", compression='gzip')
 
 
