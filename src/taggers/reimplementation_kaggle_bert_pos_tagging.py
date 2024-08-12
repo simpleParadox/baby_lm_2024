@@ -18,11 +18,12 @@ from transformers import DataCollatorForTokenClassification
 from transformers import AutoModelForTokenClassification
 # Create a huggingface Dataset from the stored sentence and pos tag data.
 
-parser = argparse.ArgumentParser(description="Train a BERT POS Tagger from scratch using the Upenn tagset.")
+parser = argparse.ArgumentParser(description="Train a BERT POS Tagger from scratch using the Upenn tagset.  use the --train_on_full_data flag to train on the full data.")
 parser.add_argument("--batch_size", type=int, default=512, help="The batch size for training.")
 parser.add_argument("--num_train_epochs", type=int, default=20, help="The number of training epochs.")
 parser.add_argument("--seed", type=int, default=0, help="The seed for the random number generator.")
 parser.add_argument('--test_run', action='store_true', help="Whether to run the script in test mode.") # Default value is False.
+parser.add_argument('--train_on_full_data', action='store_true', help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
 args = parser.parse_args()
 
 
@@ -88,7 +89,12 @@ df["class_labels"] = tag_to_class_mapping_for_data
 
 
 from sklearn.model_selection import train_test_split
-train_df, val_df = train_test_split(df, test_size=0.1, random_state=args.seed)
+
+if args.train_on_full_data:
+    train_df = df
+    val_df = df
+else:
+    train_df, val_df = train_test_split(df, test_size=0.1, random_state=args.seed)
 
 from datasets import Dataset
 df_dataset_train = Dataset.from_pandas(train_df)
@@ -274,55 +280,63 @@ for epoch in tqdm(range(num_train_epochs)):
             
     
     wandb.log({"epoch_loss": running_loss / len(train_dataloader.dataset), "epoch": epoch})
-    # Evaluation
-    model.eval()
-    eval_loss = 0.0
-    for batch in tqdm(eval_dataloader):
-        with torch.no_grad():
-            outputs = model(**batch)
-            eval_loss += (outputs.loss.item() * batch["input_ids"].size(0))
 
-        predictions = outputs.logits.argmax(dim=-1)
-        labels = batch["labels"]
 
-        # Necessary to pad predictions and labels for being gathered
-        predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
-        labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
+    # Evaluation only if not training on the full data.
+    if not args.train_on_full_data:
+        model.eval()
+        eval_loss = 0.0
+        for batch in tqdm(eval_dataloader):
+            with torch.no_grad():
+                outputs = model(**batch)
+                eval_loss += (outputs.loss.item() * batch["input_ids"].size(0))
 
-        predictions_gathered = accelerator.gather(predictions)
-        labels_gathered = accelerator.gather(labels)
+            predictions = outputs.logits.argmax(dim=-1)
+            labels = batch["labels"]
 
-        true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
-        metric.add_batch(predictions=true_predictions, references=true_labels)
+            # Necessary to pad predictions and labels for being gathered
+            predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
+            labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
+
+            predictions_gathered = accelerator.gather(predictions)
+            labels_gathered = accelerator.gather(labels)
+
+            true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
+            metric.add_batch(predictions=true_predictions, references=true_labels)
+            
+        eval_loss /= len(eval_dataloader.dataset)    
+        wandb.log({"val_loss": eval_loss, "epoch": epoch}) # Just using the the len(eval_dataloader) is fine because the loss is already averaged over the number of batches.
+
+        results = metric.compute()
+        print(
+            f"epoch {epoch}:",
+            {
+                key: results[f"overall_{key}"]
+                for key in ["precision", "recall", "f1", "accuracy"]
+            },
+        )
+        # Create a dictionary from the results.
+        results_dict = {key: results[f"overall_{key}"] for key in ["precision", "recall", "f1", "accuracy"]}
         
-    eval_loss /= len(eval_dataloader.dataset)    
-    wandb.log({"val_loss": eval_loss, "epoch": epoch}) # Just using the the len(eval_dataloader) is fine because the loss is already averaged over the number of batches.
-
-    results = metric.compute()
-    print(
-        f"epoch {epoch}:",
-        {
-            key: results[f"overall_{key}"]
-            for key in ["precision", "recall", "f1", "accuracy"]
-        },
-    )
-    # Create a dictionary from the results.
-    results_dict = {key: results[f"overall_{key}"] for key in ["precision", "recall", "f1", "accuracy"]}
-    
-    
-    # Log the results to wandb after every epoch.
-    wandb.log(results_dict)
-    # Save the model checkpoint for each epoch.
-    # Save after every five epochs.
-    if epoch % 5 == 0:
-        model.save_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/model_epoch_{epoch}/")
-    
-    if eval_loss < min_val_loss:
-        min_val_loss = eval_loss
-        args = {"min_val_loss": min_val_loss, "epoch": epoch}
         
-        # Add the results_dict to the args dictionary.
-        args.update(results_dict)
-        # Save the best model.
-        model.save_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/best_model/")
-        json.dump(args, open(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/best_args.json", "w"))
+        # Log the results to wandb after every epoch.
+        wandb.log(results_dict)
+        # Save the model checkpoint for each epoch.
+        # Save after every five epochs.
+        if epoch % 5 == 0:
+            model.save_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/model_epoch_{epoch}/")
+        
+        if eval_loss < min_val_loss:
+            min_val_loss = eval_loss
+            args = {"min_val_loss": min_val_loss, "epoch": epoch}
+            
+            # Add the results_dict to the args dictionary.
+            args.update(results_dict)
+            # Save the best model.
+            model.save_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/best_model/")
+            json.dump(args, open(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/best_args.json", "w"))
+
+
+if not args.train_on_full_data:
+    # Save the model after training on the whole dataset.
+    model.save_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_full_data/seed_{seed}/model_after_training_{num_train_epochs}_epochs/")
