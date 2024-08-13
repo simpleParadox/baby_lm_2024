@@ -47,6 +47,7 @@ parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wo
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
 parser.add_argument('--train_on_full_data', type=str, default=True, help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
+parser.add_argument('--wandb_mode', type=str, default='online', required=False)
 
 args = parser.parse_args()
 
@@ -117,8 +118,7 @@ else:
     raise ValueError('model_type should be either causal_lm or sequence.')
 
 # Initialize wandb.
-wandb.init(project='babylm_2024')
-# wandb.init(project='babylm_2024', mode='disabled')
+wandb.init(project='babylm_2024', mode=args.wandb_mode)
 
 # Create dict from args.
 args_dict = vars(args)
@@ -134,6 +134,11 @@ random_dir = np.random.randint(0, 100000)
 root_level_path = os.getcwd() + '/'
 print("root_level_path: ", root_level_path)
 model_save_path = root_level_path + 'saved_models/'
+
+
+if args.model_name == 'flamingo':
+    model_save_path += 'flamingo/'
+
 
 if args.train_on_full_data:
     model_save_path += 'full_data/'
