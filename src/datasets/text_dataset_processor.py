@@ -58,7 +58,7 @@ class TextDatasetProcessor(DatasetProcessorParent):
         
         if do_val:
             # Set the split ratios
-            train_ratio = 0.9
+            train_ratio = 0.9  # 90% of the data is used for training
 
             # Calculate the split indices
             num_samples = len(self.full_range)
@@ -84,8 +84,9 @@ class TextDatasetProcessor(DatasetProcessorParent):
             print("No overlap between the indices of the train and val sets.")
 
         else:
-            self.train_indices = self.full_range
-            self.val_dataset = []
+            self.train_indices = self.full_range[:].tolist()
+            self.val_dataset = None
+            self.val_indices = []
         
         self.processor = processor 
 
@@ -168,7 +169,7 @@ class TextDatasetProcessor(DatasetProcessorParent):
         print()
         print('--- VAL DATASET STATS ---')
         print()
-        print('no of val samples: ', len(self.val_dataset))
+        print('no of val samples: ', len(self.val_indices))
 
 
 

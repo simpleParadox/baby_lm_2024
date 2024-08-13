@@ -50,6 +50,7 @@ parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wo
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
 parser.add_argument('--train_on_full_data', action='store_true', help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
+parser.add_argument('--text_only_training', type=int, required=False, default=1)  # This is always True for this script.
 
 args = parser.parse_args()
 if args.load_optimizer == False or args.load_optimizer == 'False':
@@ -135,14 +136,19 @@ model_save_path = root_level_path + 'saved_models/'
 if args.initialize_with_text:
     model_save_path += 'initialize_with_text/'
 
-if args.do_curriculum:
+if args.train_on_full_data:
+    model_save_path += 'full_data/'
+    
+if not args.do_curriculum:
+    # NOTE: This is not args.do_curriculum (which is standard i.i.d training).
     model_save_path += f'text_only/standard/{args.model_type}/seed_{seed}/'
 else:
     model_save_path += f'text_only/curriculum/{args.model_type}/seed_{seed}/'
 
+model_save_path += f'{timestamp}_{random_dir}/'  # Important because of hyperparameter tuning.
 
 
-model_save_path += f'{timestamp}_{random_dir}/'
+
 
 print(f'model_save_path: {model_save_path}')
 wandb.log({'model_save_path': model_save_path})

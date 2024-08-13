@@ -112,6 +112,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         else:
             self.train_indices = self.full_range[:].tolist()
             self.val_indices = []
+            self.val_dataset = None
 
 
         self.device = device
