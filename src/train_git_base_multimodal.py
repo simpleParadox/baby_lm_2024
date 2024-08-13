@@ -314,6 +314,8 @@ for epoch in epoch_iterator:
 
     best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
     # Save the args_dict in the same directory as json.
+    if not os.path.exists(model_save_path):
+        os.makedirs(model_save_path)
     with open(model_save_path + 'best_args.json', 'w') as f:
         json.dump(best_args, f)
         print("Args saved.")
