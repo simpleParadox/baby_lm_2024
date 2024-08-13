@@ -121,8 +121,12 @@ root_level_path = os.getcwd() + '/'
 print("root_level_path: ", root_level_path)
 model_save_path = root_level_path + 'saved_models/'
 
+if args.initialize_with_text:
+    model_save_path += 'initialize_with_text/'
+
+
 # NOTE: best_text_init_root_path must be assigned first.
-if args.do_curriculum:
+if not args.do_curriculum:
     if args.initialize_with_text:
         best_text_init_root_path = model_save_path + f'text_only/standard/{args.model_type}/seed_{seed}/'
     model_save_path += f'standard/{args.model_type}/seed_{seed}/'
