@@ -21,9 +21,9 @@ import asyncio
 from torch import Tensor
 
 TSV_URLS = {
-    'train': 'src/datasets/multimodal_train/all_multimodal.tsv',
-    'val': 'src/datasets/multimodal_train/all_multimodal.tsv',
-    'test': 'src/datasets/multimodal_train/all_multimodal.tsv'
+    'train': 'src/datasets/multimodal_train/all_multimodal_all_concaps.tsv',
+    'val': 'src/datasets/multimodal_train/all_multimodal_all_concaps.tsv',
+    'test': 'src/datasets/multimodal_train/all_multimodal_all_concaps.tsv'
     # 'val': 'src/datasets/Train-GCC-training.tsv'
     # 'train': 'https://storage.cloud.google.com/gcc-data/Train/GCC-training.tsv?_ga=2.191230122.-1896153081.1529438250'
 }
@@ -63,7 +63,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     
 
-    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=42, processor=None) -> None:
+    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=42, processor=None, do_val=True) -> None:
 
         self.train_data_pipe: IterDataPipe = None
         self.val_data_pipe: IterDataPipe = None
@@ -75,41 +75,43 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         
         self.batch_size = batch_size
         self.val_batch_size = 8
-        self.test_batch_size = 8
 
         self.n_workers = n_workers
         self.val_n_workers = 28
         self.manual_seed = manual_seed
 
         # Create ranges for train / val / test splits.
-        self.full_range = np.arange(0, 2851072)  # 2851072 is the number of samples in the all_multimodal.tsv file.
+        self.full_range = np.arange(0, 3043190)  # 2851072 is the number of samples in the all_multimodal.tsv file.
 
+        if do_val:
+            # Set the split ratios
+            train_ratio = 0.9
 
-        # Set the split ratios
-        train_ratio = 0.9
+            # Calculate the split indices
+            num_samples = len(self.full_range)
+            train_end = int(train_ratio * num_samples)
 
-        # Calculate the split indices
-        num_samples = len(self.full_range)
-        train_end = int(train_ratio * num_samples)
+            # Shuffle the indices to ensure randomness
+            np.random.seed(manual_seed)
+            np.random.shuffle(self.full_range)
 
-        # Shuffle the indices to ensure randomness
-        np.random.seed(manual_seed)
-        np.random.shuffle(self.full_range)
+            # Split the indices into train, val, and test sets
+            self.train_indices = self.full_range[:train_end]
+            self.val_indices = self.full_range[train_end:]
 
-        # Split the indices into train, val, and test sets
-        self.train_indices = self.full_range[:train_end]
-        self.val_indices = self.full_range[train_end:]
+            # Convert the indices to lists (optional, as they are already arrays)
+            self.train_indices = self.train_indices.tolist()
+            self.val_indices = self.val_indices.tolist()
 
-        # Convert the indices to lists (optional, as they are already arrays)
-        self.train_indices = self.train_indices.tolist()
-        self.val_indices = self.val_indices.tolist()
+            # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
+            indices_train_set = set(self.train_indices)
+            indices_val_set = set(self.val_indices)
 
-        # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
-        indices_train_set = set(self.train_indices)
-        indices_val_set = set(self.val_indices)
-
-        assert len(indices_train_set.intersection(indices_val_set)) == 0
-        print("No overlap between the indices of the train and val sets.")
+            assert len(indices_train_set.intersection(indices_val_set)) == 0
+            print("No overlap between the indices of the train and val sets.")
+        else:
+            self.train_indices = self.full_range[:].tolist()
+            self.val_indices = []
 
 
         self.device = device
@@ -120,7 +122,8 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
         # always need to first load train then load val dataset. Fix this confusing requirement later
         self.load_train_dataset()
-        self.load_val_dataset()
+        if do_val:
+            self.load_val_dataset()
         
     def collate_fn(self, batch) -> tuple[Tensor, list[str]]:
         '''
@@ -201,13 +204,13 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         batch_size = self.val_batch_size
         self.val_dataloader = DataLoader(self.val_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.val_n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
     
-    def load_test_dataset(self):
-
-        self.test_data_pipe = multimodal_dataset_pipe(split="test", indices=self.test_indices)
-        batch_size = self.test_batch_size
-        self.test_dataloader = DataLoader(self.test_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.val_n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
-
-
+    def get_dataset_length(self, split='train') -> int:
+        if split == 'train':
+            return len(self.train_indices)
+        elif split == 'val':
+            return len(self.val_indices)
+        else:
+            return None
 
     def print_dataset_stats(self):
 
@@ -215,14 +218,14 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         print('--- TRAIN DATASET STATS ---')
         print()
 
-        print('no of train samples: ', 3318333)
+        print('no of train samples: ', 3043190)
 
         print()
         print('--- VAL DATASET STATS ---')
         print()
 
 
-        print('no of val samples: ', 15840)
+        print('no of val samples: ', len(self.val_indices))
 
 
 

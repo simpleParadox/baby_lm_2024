@@ -17,7 +17,7 @@ class TextDatasetProcessor(DatasetProcessorParent):
 
     def __init__(self, device='cuda:0', batch_size=64,
                  root='./', manual_seed=42,
-                 n_workers=20, processor=None, dataset_size=-1) -> None:
+                 n_workers=20, processor=None, dataset_size=-1, do_val=True) -> None:
         '''
         Create a dataloader using only the non-caption data.
         '''
@@ -36,8 +36,11 @@ class TextDatasetProcessor(DatasetProcessorParent):
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.DATA_ROOT = Path(root)
         self.data_dir = Path("./data/train_50M_multimodal_clean/")
-        self.train_file_paths: list[str] = [str(f) for f in self.data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and (f.name not in ["cc_3M_captions_reduced.train", "local_narr_captions.train"])]
+
+        # Train only the non-caption data. NOTE: This is the non-reduced data because later I realized that all the data is necessary to be included.
+        self.train_file_paths: list[str] = [str(f) for f in self.data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and (f.name not in ["cc_3M_captions_non_reduced_filtered.train", "local_narr_captions.train"])]
         
+        self.do_val = do_val
         
         
         # For each path, read the lines.
@@ -53,39 +56,44 @@ class TextDatasetProcessor(DatasetProcessorParent):
         
         self.full_range = np.arange(0, len(texts))  # 2851072 is the number of samples in the all_multimodal.tsv file.
         
+        if do_val:
+            # Set the split ratios
+            train_ratio = 0.9
 
-        # Set the split ratios
-        train_ratio = 0.9
+            # Calculate the split indices
+            num_samples = len(self.full_range)
+            train_end = int(train_ratio * num_samples)
 
-        # Calculate the split indices
-        num_samples = len(self.full_range)
-        train_end = int(train_ratio * num_samples)
+            # Shuffle the indices to ensure randomness
+            np.random.seed(manual_seed)
+            np.random.shuffle(self.full_range)
 
-        # Shuffle the indices to ensure randomness
-        np.random.seed(manual_seed)
-        np.random.shuffle(self.full_range)
+            # Split the indices into train, val, and test sets
+            self.train_indices = self.full_range[:train_end]
+            self.val_indices = self.full_range[train_end:]
 
-        # Split the indices into train, val, and test sets
-        self.train_indices = self.full_range[:train_end]
-        self.val_indices = self.full_range[train_end:]
+            # Convert the indices to lists (optional, as they are already arrays)
+            self.train_indices = self.train_indices.tolist()
+            self.val_indices = self.val_indices.tolist()
 
-        # Convert the indices to lists (optional, as they are already arrays)
-        self.train_indices = self.train_indices.tolist()
-        self.val_indices = self.val_indices.tolist()
+            # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
+            indices_train_set = set(self.train_indices)
+            indices_val_set = set(self.val_indices)
 
-        # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
-        indices_train_set = set(self.train_indices)
-        indices_val_set = set(self.val_indices)
+            assert len(indices_train_set.intersection(indices_val_set)) == 0
+            print("No overlap between the indices of the train and val sets.")
 
-        assert len(indices_train_set.intersection(indices_val_set)) == 0
-        print("No overlap between the indices of the train and val sets.")
+        else:
+            self.train_indices = self.full_range
+            self.val_dataset = []
         
         self.processor = processor 
 
         self.create_train_val_dataloaders() # Create train and val dataloaders.
         
         self.load_train_dataset()
-        self.load_val_dataset()
+        if do_val:
+            self.load_val_dataset()
         
     def load_train_dataset(self):
         self.train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
@@ -110,8 +118,15 @@ class TextDatasetProcessor(DatasetProcessorParent):
         outputs2 = captions
 
         return outputs2
-
-
+    
+    def get_dataset_length(self, split='train') -> int:
+        if split == 'train':
+            return len(self.train_indices)
+        elif split == 'val':
+            return len(self.val_indices)
+        else:
+            return None
+    
     def get_num_batches_train(self) -> int:
         return len(self.train_indices) // self.batch_size
     
@@ -133,14 +148,14 @@ class TextDatasetProcessor(DatasetProcessorParent):
         
         # Select the rows that are in the train_indices
         self.train_strings = df.iloc[self.train_indices]['text'].tolist()
-        
-        self.val_strings = df.iloc[self.val_indices]['text'].tolist()
-        
         self.train_strings = [x for x in self.train_strings if x]
-        self.val_strings = [x for x in self.val_strings if x]
-
         self.train_dataset = TextDataset(self.train_strings)
-        self.val_dataset = TextDataset(self.val_strings)
+        
+        if self.do_val:
+            self.val_strings = df.iloc[self.val_indices]['text'].tolist()
+            self.val_strings = [x for x in self.val_strings if x]
+            self.val_dataset = TextDataset(self.val_strings)
+        
 
 
 

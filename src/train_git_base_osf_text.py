@@ -46,9 +46,10 @@ parser.add_argument('--max_token_length', type=int, default=50)
 parser.add_argument('--initialize_with_text', type=str, default=False)
 parser.add_argument('--model_name', type=str, default='git')
 parser.add_argument('--fp16', type=str, default=True)
-parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_git/')
+parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/')
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
+parser.add_argument('--train_on_full_data', action='store_true', help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
 
 args = parser.parse_args()
 if args.load_optimizer == False or args.load_optimizer == 'False':
@@ -191,25 +192,29 @@ elif args.optimizer == 'sgd':
 baby_model.to(device).train()
 # print("Model loaded")
 # print(baby_model)
+do_val = True
+if args.train_on_full_data:
+    do_val = False
 
 text_dataset_processor = TextDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
                                                           n_workers=n_workers, device=device,
-                                                          processor=baby_model.processor, manual_seed=seed)
+                                                          processor=baby_model.processor, manual_seed=seed,
+                                                          do_val=do_val)
 
 best_loss = np.inf
 last_saved = -1
-step = 0  # Global step.
 test_images = None
 test_captions = None
 
 training_dataloader = text_dataset_processor.train_dataloader
-val_dataloader = text_dataset_processor.val_dataloader
+
+if do_val:
+    val_dataloader = text_dataset_processor.val_dataloader
 
 # TODO: As of now, no early stopping is implemented. Implement it if needed.
 
 num_batches = text_dataset_processor.get_num_batches_train()
 print("num_batches train: ", num_batches)
-running_loss = 0
 
 if args.fp16:
     print("Using fp16")
@@ -226,68 +231,68 @@ else:
 #     return model_outputs
 
 # train_step = torch.compile(train_step)
-minimum_val_loss = np.inf
+min_val_loss = np.inf
+global_step = 0
 epoch_iterator = tqdm(range(n_epochs))
 device_autocast = 'cuda' if torch.cuda.is_available() else 'cpu'
-train = True
-if train:
-    print("Training")
-    for epoch in epoch_iterator:
+print("Training")
+for epoch in epoch_iterator:
+    # Training.
+    running_loss = 0.0
+    average_running_loss = 0.0
+    batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
+    for batch_step, text_data in enumerate(training_dataloader):
+
+        optimizer.zero_grad()
+
+        try:
+            tokenized_data = baby_model.tokenizer(text=text_data, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+        except:
+            print("Error in tokenizing text data: ", text_data)
+            continue
+        input_ids = tokenized_data['input_ids'].to(device)
+        attention_mask = tokenized_data['attention_mask'].to(device)
         
-
-        
-        epoch_loss = 0
-        batch_steps = 0
-        batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
-        for text_data in training_dataloader:
-
-            optimizer.zero_grad()
-
-            try:
-                tokenized_data = baby_model.tokenizer(text=text_data, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
-            except:
-                print("Error in tokenizing text data: ", text_data)
-                continue
-            input_ids = tokenized_data['input_ids'].to(device)
-            attention_mask = tokenized_data['attention_mask'].to(device)
-            
-            if args.fp16:
-                with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                    model_outputs = baby_model(input_ids=input_ids, attention_mask=attention_mask)
-                    loss = model_outputs.loss
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
+        if args.fp16:
+            with torch.autocast(device_type=device_autocast, dtype=torch.float16):
                 model_outputs = baby_model(input_ids=input_ids, attention_mask=attention_mask)
                 loss = model_outputs.loss
-                loss.backward()
-                optimizer.step()
-
-            
-            epoch_loss += loss.item()
-            running_loss += loss.item()
-
-            batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
-            batch_iterator.update(1)
-            step += 1
-            batch_steps += 1
-
-            # Log the loss every 50 steps.
-            if step % 100 == 0:
-                wandb.log({'step': step, 'loss': epoch_loss / batch_steps})
-                wandb.log({'step': step,'running_loss': running_loss / step})
-
-
-        epoch_loss /= batch_steps
-
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            model_outputs = baby_model(input_ids=input_ids, attention_mask=attention_mask)
+            loss = model_outputs.loss
+            loss.backward()
+            optimizer.step()
 
         
-        # Print average loss at the end of the epoch.
-        epoch_iterator.set_description(f'epoch: {epoch} per_epoch_loss: {epoch_loss / batch_steps}')
-        # Log the average loss.
-        wandb.log({'epoch': epoch, 'per_epoch_loss': epoch_loss / batch_steps})
+        running_loss += (loss.item() * input_ids.size(0))
+        average_running_loss += loss.item()
 
+        batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
+        batch_iterator.update(1)
+        global_step += 1
+
+        # Log the loss every 50 steps.
+        if batch_step % 100 == 0:
+            average_train_loss_per_batch = average_running_loss / (batch_step + 1)
+            wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
+    
+    epoch_loss = running_loss / text_dataset_processor.get_dataset_length('train')
+    wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
+
+    best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
+    # Save the args_dict in the same directory as json.
+    with open(model_save_path + 'best_args.json', 'w') as f:
+        json.dump(best_args, f)
+        print("Args saved.")
+    
+    # Print average loss at the end of the epoch.
+    epoch_iterator.set_description(f'epoch: {epoch} per_epoch_loss: {epoch_loss}')
+    # Log the average loss.
+
+    if not args.train_on_full_data:
         if epoch % min_save_every == 0:
             num_batches_val = text_dataset_processor.get_num_batches_val()
             print("Num batches val: ", num_batches_val)
@@ -295,9 +300,8 @@ if train:
             print("Validating")
             baby_model.eval()
             print("Eval mode")
-            val_loss = 0
-            val_step = 0  # Using this as a divisor to get the average loss.
-            for text_data in val_dataloader:
+            eval_loss = 0.0
+            for text_data in tqdm(val_dataloader):
                 try:
                     tokenized_data = baby_model.tokenizer(text_data, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
                 except:
@@ -314,10 +318,10 @@ if train:
                 else:
                     model_outputs = baby_model(input_ids=input_ids, attention_mask=attention_mask)
                     loss = model_outputs.loss
-                val_loss += loss.item()
+                eval_loss += (loss.item() * input_ids.size(0))
                 val_iterator.update(1)
-                val_step += 1
-            current_val_loss = val_loss / val_step
+                
+            current_val_loss = eval_loss / text_dataset_processor.get_dataset_length('val')
             wandb.log({'val_loss': current_val_loss})
             
             if current_val_loss <= minimum_val_loss:
@@ -329,9 +333,15 @@ if train:
                 wandb.log({'min_val_loss': minimum_val_loss})
                 args_dict['min_val_loss'] = current_val_loss
                 # Save the args_dict in the same directory as json.
-                with open(model_save_path + 'args.json', 'w') as f:
+                with open(model_save_path + 'best_args.json', 'w') as f:
                     json.dump(args_dict, f)
                     print("Args saved.")
             print("Validation done.")
             baby_model.train()
             print("Train mode")
+
+if args.train_on_full_data:
+    if not os.path.exists(model_save_path):
+        os.makedirs(model_save_path)
+    baby_model.save_model(model_save_path)
+    print("Model saved.")

@@ -1,4 +1,6 @@
-# %%
+"""
+This script is responsible for creating the dataset for the BERT POS tagger training.
+"""
 #Regex module for checking alphanumeric values.
 import re
 def extract_features(sentence, index):
@@ -64,7 +66,7 @@ nltk.download('treebank')
 # %%
 from pathlib import Path
 data_dir = Path("../../data/train_50M_multimodal_clean/")
-paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"]]
+paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".train"] and f.name in ['cc_3M_captions_non_reduced_filtered.train']]
 print("Paths: ", paths)
 # %%
 from nltk.tag import pos_tag

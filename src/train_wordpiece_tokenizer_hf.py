@@ -51,7 +51,7 @@ data_dict = {'text': texts}
 # data = pd.DataFrame(texts, columns=['text'])
 data = datasets.Dataset.from_dict(data_dict)
 
-def get_training_corpus():
+def get_training_corpus():  # Get in batches of 1000.
     dataset = data["text"]
     for start_idx in range(0, len(dataset), 1000):
         samples = dataset[start_idx : start_idx + 1000]

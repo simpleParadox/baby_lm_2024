@@ -43,9 +43,10 @@ parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # Thi
 parser.add_argument('--max_token_length', type=int, default=50)
 parser.add_argument('--initialize_with_text', type=str, default=False)
 parser.add_argument('--fp16', type=str, default=True)
-parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_git/')
+parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/')
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
+parser.add_argument('--train_on_full_data', action='store_true', help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
 
 args = parser.parse_args()
 
@@ -188,15 +189,18 @@ baby_model.to(device).train()
 # print("Model loaded")
 # print(baby_model)
 
+do_val = True
+if args.train_on_full_data:
+    print("Because train_on_full_data is True, setting do_val to False.")
+    do_val = False
 
 print("Loading dataset processor")
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
                                                           n_workers=n_workers, device=device,
-                                                          processor=baby_model.processor, manual_seed=seed)
+                                                          processor=baby_model.processor, manual_seed=seed, do_val=do_val)
 
 best_loss = np.inf
 last_saved = -1
-step = 0  # Global step.
 test_images = None
 test_captions = None
 
@@ -210,7 +214,8 @@ if args.use_accelerate:
     )
 else:
     training_dataloader = multimodal_dataset_processor.train_dataloader
-    val_dataloader = multimodal_dataset_processor.val_dataloader
+    if do_val:
+        val_dataloader = multimodal_dataset_processor.val_dataloader
 
 # TODO: As of now, no early stopping is implemented. Implement it if needed.
 
@@ -233,71 +238,63 @@ else:
 #     return model_outputs
 
 # train_step = torch.compile(train_step)
-minimum_val_loss = np.inf
+min_val_loss = np.inf
+global_step = 0
 epoch_iterator = tqdm(range(n_epochs))
 device_autocast = 'cuda' if torch.cuda.is_available() else 'cpu'
 train = True
 print(f"Train = {train}")
-if train:
-    print("Training")
-    for epoch in epoch_iterator:
+print("Training")
+for epoch in epoch_iterator:
+    # Training.
+    running_loss = 0.0
+    average_running_loss = 0.0
+    batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
+    for batch_step, (preprocessed_images, captions) in enumerate(training_dataloader):
+
+        optimizer.zero_grad()
+        try:
+            tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+        except:
+            print("Error in tokenizing captions: ", captions)
+            continue
+        input_ids = tokenized_captions['input_ids'].to(device)
+        attention_mask = tokenized_captions['attention_mask'].to(device)
+
+        preprocessed_images = preprocessed_images.to(device)
         
-
-        
-        epoch_loss = 0
-        batch_steps = 0
-        batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
-        for preprocessed_images, captions in training_dataloader:
-
-            optimizer.zero_grad()
-
-            try:
-                tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
-            except:
-                print("Error in tokenizing captions: ", captions)
-                continue
-            input_ids = tokenized_captions['input_ids'].to(device)
-            attention_mask = tokenized_captions['attention_mask'].to(device)
-
-            preprocessed_images = preprocessed_images.to(device)
-            
-            if args.fp16:
-                with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                    model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-                    loss = model_outputs.loss
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
+        if args.fp16:
+            with torch.autocast(device_type=device_autocast, dtype=torch.float16):
                 model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
                 loss = model_outputs.loss
-                loss.backward()
-                optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+            loss = model_outputs.loss
+            loss.backward()
+            optimizer.step()
 
-            
-            epoch_loss += loss.item()
-            running_loss += loss.item()
+        running_loss += (loss.item() * input_ids["input_ids"].shape[0])
+        average_running_loss += loss.item()
 
-            batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
-            batch_iterator.update(1)
-            step += 1
-            batch_steps += 1
+        batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
+        batch_iterator.update(1)
+        global_step += 1
 
-            # Log the loss every 50 steps.
-            if step % 50 == 0:
-                wandb.log({'step': step, 'epoch_loss': epoch_loss / batch_steps})
-                wandb.log({'step': step,'running_loss': running_loss / step})
+        # Log the loss every 50 steps.
+        if batch_step % 100 == 0:
+            average_train_loss_per_batch = average_running_loss / (batch_step + 1)
+            wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
 
 
-        epoch_loss /= batch_steps
 
-
-        
-        # Print average loss at the end of the epoch.
-        epoch_iterator.set_description(f'epoch: {epoch} per_epoch_loss: {epoch_loss / batch_steps}')
-        # Log the average loss.
-        wandb.log({'epoch': epoch, 'per_epoch_loss': epoch_loss / batch_steps})
-
+    
+    epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
+    wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
+    
+    if not args.train_on_full_data:
         if epoch % 1 == 0:
             num_batches_val = multimodal_dataset_processor.get_num_batches_val()
             print("Num batches val: ", num_batches_val)
@@ -306,9 +303,8 @@ if train:
             # evaluate_model(model=baby_model, preprocessed_images=preprocessed_images, test_captions=captions)
             baby_model.eval()
             print("Eval mode")
-            val_loss = 0
-            val_step = 0  # Using this as a divisor to get the average loss.
-            for preprocessed_images, captions in val_dataloader:
+            eval_loss = 0.0
+            for preprocessed_images, captions in tqdm(val_dataloader):
                 try:
                     tokenized_captions = baby_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
                 except:
@@ -327,12 +323,10 @@ if train:
                     model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
                     loss = model_outputs.loss
 
-                val_loss += loss.item()
+                eval_loss += (loss.item() * input_ids.size(0))
                 val_iterator.update(1)
-                val_step += 1
-            current_val_loss = val_loss / val_step
+            current_val_loss = eval_loss / multimodal_dataset_processor.get_dataset_length('val')
             wandb.log({'val_loss': current_val_loss})
-            
             if current_val_loss <= minimum_val_loss:
                 if not os.path.exists(model_save_path):
                     os.makedirs(model_save_path)
@@ -350,20 +344,8 @@ if train:
             print("Train mode")
 
 
-# NOTE: The following blocks is commented out for now because the 
-# generate method doesn't really work.
-# Test model
-# baby_model.eval()
-# print("Testing")
-# all_generated_captions = []
-# # print("Test indices: ", multimodal_dataset_processor.test_indices)
-# for preprocessed_images, captions in test_dataloader:
-#     generated_caption, true_captions = evaluate_model_image_caption(model=baby_model, preprocessed_images=preprocessed_images, test_captions=captions)
-#     all_generated_captions.append([generated_caption, true_captions])
-
-# Save in a dataframe.
-# import pandas as pd
-# df = pd.DataFrame(all_generated_captions, columns=['generated_caption', 'true_captions'])
-
-# # Save as a wandb Table.
-# wandb.log({'test_results_table': wandb.Table(dataframe=df)})
+if args.train_on_full_data:
+    if not os.path.exists(model_save_path):
+        os.makedirs(model_save_path)
+    baby_model.save_model(model_save_path)
+    print("Model saved.")

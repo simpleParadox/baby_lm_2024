@@ -1,3 +1,8 @@
+"""
+Use the following command to run the script:
+CUDA_VISIBLE_DEVICES=1,2,3,4,5 python src/taggers/reimplementation_kaggle_bert_pos_tagging.py --batch_size 512 --num_train_epochs 5 --seed 0 --train_on_full_data
+"""
+
 import warnings
 warnings.filterwarnings('ignore')
 from datasets import Dataset
@@ -20,7 +25,7 @@ from transformers import AutoModelForTokenClassification
 
 parser = argparse.ArgumentParser(description="Train a BERT POS Tagger from scratch using the Upenn tagset.  use the --train_on_full_data flag to train on the full data.")
 parser.add_argument("--batch_size", type=int, default=512, help="The batch size for training.")
-parser.add_argument("--num_train_epochs", type=int, default=20, help="The number of training epochs.")
+parser.add_argument("--num_train_epochs", type=int, default=5, help="The number of training epochs.")  # Five epochs should be enough.
 parser.add_argument("--seed", type=int, default=0, help="The seed for the random number generator.")
 parser.add_argument('--test_run', action='store_true', help="Whether to run the script in test mode.") # Default value is False.
 parser.add_argument('--train_on_full_data', action='store_true', help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
@@ -60,6 +65,7 @@ if args.test_run:
     data.extend(temp_data)
 else:
     for file_name in tqdm(file_names):
+        print("Using all the files.")
         print(file_name)
         temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data/{file_name}.pkl", "rb"))
         data.extend(temp_data)
@@ -92,13 +98,13 @@ from sklearn.model_selection import train_test_split
 
 if args.train_on_full_data:
     train_df = df
-    val_df = df
 else:
     train_df, val_df = train_test_split(df, test_size=0.1, random_state=args.seed)
 
 from datasets import Dataset
 df_dataset_train = Dataset.from_pandas(train_df)
-df_dataset_val = Dataset.from_pandas(val_df)
+if not args.train_on_full_data:
+    df_dataset_val = Dataset.from_pandas(val_df)
 
 
 def align_labels_with_tokens(labels, word_ids):
@@ -146,9 +152,10 @@ def tokenize_and_align_labels(examples):
     return tokenized_inputs
 
 df_dataset_tokenized_train = df_dataset_train.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=1)
-df_dataset_tokenized_eval = df_dataset_val.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=1)
+                                      remove_columns=df_dataset_train.column_names, num_proc=20)
+if not args.train_on_full_data:
+    df_dataset_tokenized_eval = df_dataset_val.map(tokenize_and_align_labels, batched=True,
+                                        remove_columns=df_dataset_train.column_names, num_proc=20)
 
 
 
@@ -200,10 +207,12 @@ train_dataloader = DataLoader(
     batch_size=batch_size,
     num_workers=2
 )
-eval_dataloader = DataLoader(
-    df_dataset_tokenized_eval, collate_fn=data_collator, batch_size=batch_size,
-    num_workers=2
-)
+eval_dataloader = None
+if not args.train_on_full_data:
+    eval_dataloader = DataLoader(
+        df_dataset_tokenized_eval, collate_fn=data_collator, batch_size=batch_size,
+        num_workers=2
+    )
 
 from torch.optim import AdamW, Adam
 
@@ -256,11 +265,12 @@ progress_bar = tqdm(range(num_training_steps))
 min_val_loss = np.inf
 global_step = 0
 for epoch in tqdm(range(num_train_epochs)):
-    # Training
+    # Training.
     running_loss = 0.0
     average_running_loss = 0.0
     model.train()
     for batch_step, batch in enumerate(train_dataloader):
+        optimizer.zero_grad()
         outputs = model(**batch)
         loss = outputs.loss
         running_loss += (loss.item() * batch["input_ids"].size(0))
@@ -269,7 +279,6 @@ for epoch in tqdm(range(num_train_epochs)):
 
         optimizer.step()
         lr_scheduler.step()
-        optimizer.zero_grad()
         progress_bar.update(1)
         progress_bar.set_description(f"epoch {epoch} loss: {running_loss / len(train_dataloader.dataset)}")
         global_step += 1
@@ -337,6 +346,6 @@ for epoch in tqdm(range(num_train_epochs)):
             json.dump(args, open(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_seed_{seed}/best_args.json", "w"))
 
 
-if not args.train_on_full_data:
+if args.train_on_full_data:
     # Save the model after training on the whole dataset.
     model.save_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_full_data/seed_{seed}/model_after_training_{num_train_epochs}_epochs/")
