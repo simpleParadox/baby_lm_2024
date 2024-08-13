@@ -37,7 +37,7 @@ parser.add_argument('--lr', type=float, required=False, default=1e-5)
 parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
 parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard fine-tuning.
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
-parser.add_argument('--model_name', type=str, default='flamingo')
+parser.add_argument('--model_name', type=str, default='git')
 parser.add_argument('--use_accelerate', type=str, default=False)  # Whether to use accelerate or not.
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
 parser.add_argument('--max_token_length', type=int, default=50)
@@ -46,9 +46,15 @@ parser.add_argument('--fp16', type=str, default=True)
 parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/')
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
-parser.add_argument('--train_on_full_data', action='store_true', help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
+parser.add_argument('--train_on_full_data', type=str, default=True, help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
 
 args = parser.parse_args()
+
+
+if args.train_on_full_data == False or args.train_on_full_data == 'False':
+    args.train_on_full_data = False
+else:
+    args.train_on_full_data = True
 
 if args.load_optimizer == False or args.load_optimizer == 'False':
     args.load_optimizer = False
@@ -74,6 +80,14 @@ if args.fp16 == False or args.fp16 == 'False':
     args.fp16 = False
 else:
     args.fp16 = True
+
+
+# Check tokenizer path for correct model.
+if args.model_name == 'git':
+    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
+elif args.model_name == 'flamingo':
+    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
+
 
 batch_size = args.batch_size
 dataset_size = args.dataset_size # negative for full dataset
@@ -121,18 +135,22 @@ root_level_path = os.getcwd() + '/'
 print("root_level_path: ", root_level_path)
 model_save_path = root_level_path + 'saved_models/'
 
-if args.initialize_with_text:
-    model_save_path += 'initialize_with_text/'
+if args.train_on_full_data:
+    model_save_path += 'full_data/'
 
 
-# NOTE: best_text_init_root_path must be assigned first.
+
+
+# NOTE: best_text_init_root_path must be assigned first. The ordering is important.
 if not args.do_curriculum:
     if args.initialize_with_text:
         best_text_init_root_path = model_save_path + f'text_only/standard/{args.model_type}/seed_{seed}/'
+        model_save_path += 'initialize_with_text/'
     model_save_path += f'standard/{args.model_type}/seed_{seed}/'
 else:
     if args.initialize_with_text:
         best_text_init_root_path = model_save_path + f'text_only/curriculum/{args.model_type}/seed_{seed}/'
+        model_save_path += 'initialize_with_text/'
     model_save_path += f'curriculum/{args.model_type}/seed_{seed}/'
 
 
@@ -294,9 +312,25 @@ for epoch in epoch_iterator:
 
 
 
-    
+    best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
+    # Save the args_dict in the same directory as json.
+    with open(model_save_path + 'best_args.json', 'w') as f:
+        json.dump(best_args, f)
+        print("Args saved.")
+        
     epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
     wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
+    
+    
+    if args.train_on_full_data:
+        # Save the model every 5 epochs.
+        if (epoch+1) % 5 == 0:
+            epoch_path = model_save_path + f'epoch_{epoch+1}/'
+            if not os.path.exists(epoch_path):
+                os.makedirs(epoch_path)
+            baby_model.save_model(epoch_path)
+            print("Model saved at epoch: ", epoch)
+    
     
     if not args.train_on_full_data:
         if epoch % 1 == 0:
@@ -349,6 +383,7 @@ for epoch in epoch_iterator:
 
 
 if args.train_on_full_data:
+    model_save_path = model_save_path + 'final_model/'
     if not os.path.exists(model_save_path):
         os.makedirs(model_save_path)
     baby_model.save_model(model_save_path)

@@ -37,7 +37,7 @@ class TextDatasetProcessor(DatasetProcessorParent):
         self.DATA_ROOT = Path(root)
         self.data_dir = Path("./data/train_50M_multimodal_clean/")
 
-        # Train only the non-caption data. NOTE: This is the non-reduced data because later I realized that all the data is necessary to be included.
+        # Train only the non-caption data. NOTE: This is the non-reduced data (for cc_3m) because later I realized that all the data is necessary to be included to achieve 100M tokens.
         self.train_file_paths: list[str] = [str(f) for f in self.data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and (f.name not in ["cc_3M_captions_non_reduced_filtered.train", "local_narr_captions.train"])]
         
         self.do_val = do_val

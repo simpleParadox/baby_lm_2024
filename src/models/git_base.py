@@ -85,11 +85,8 @@ class BabyFlamingoModel(nn.Module):
 
         # Define pretrained_configs here
         # print("Loading from babylm config")
-        flamingo_config_path = "/home/rsaha/projects/babylm/flamingo-2024/config.json"
-        flamingo_config = FlamingoConfig.from_pretrained(flamingo_config_path)
 
         # Set the manual seed that will be later used to set the determinism in the modeling_git.py file.
-        flamingo_config.manual_seed = manual_seed
         
         if initialize_with_text:
             print("Loading a model that was trained on text only.")
@@ -99,6 +96,7 @@ class BabyFlamingoModel(nn.Module):
             if baseline_causal_lm and not baseline_sequence_classification:
                 self.model_type = "causal_lm"
                 self.model = FlamingoForCausalLM.from_pretrained(text_init_model_path, local_files_only=True)
+                
             elif not baseline_causal_lm and baseline_sequence_classification:
                 self.model_type = "sequence"
                 self.model = FlamingoForSequenceClassification.from_pretrained(text_init_model_path, local_files_only=True)
@@ -109,6 +107,9 @@ class BabyFlamingoModel(nn.Module):
                 
                 
         else:
+            flamingo_config_path = "/home/rsaha/projects/babylm/flamingo-2024/config.json"
+            flamingo_config = FlamingoConfig.from_pretrained(flamingo_config_path)
+            flamingo_config.manual_seed = manual_seed
             print("Loading a randomly initialized model.")
             if baseline_causal_lm and not baseline_sequence_classification:
                 self.model_type = "causal_lm"
@@ -194,11 +195,6 @@ class BabyGitModel(nn.Module):
 
         # Define pretrained_configs here
         # print("Loading from babylm config")
-        git_config_path = "/home/rsaha/projects/babylm/git-2024/config.json"
-        git_config = GitConfig.from_pretrained(git_config_path)
-
-        # Set the manual seed that will be later used to set the determinism in the modeling_git.py file.
-        git_config.manual_seed = manual_seed
         
         if initialize_with_text:
             print("Loading a model that was trained on text only.")
@@ -221,6 +217,11 @@ class BabyGitModel(nn.Module):
                 
         else:
             print("Loading a randomly initialized model.")
+            git_config_path = "/home/rsaha/projects/babylm/git-2024/config.json"
+            git_config = GitConfig.from_pretrained(git_config_path)
+
+            # Set the manual seed that will be later used to set the determinism in the modeling_git.py file.
+            git_config.manual_seed = manual_seed
             if baseline_causal_lm and not baseline_sequence_classification:
                 self.model_type = "causal_lm"
                 self.model = GitForCausalLM(config=git_config)

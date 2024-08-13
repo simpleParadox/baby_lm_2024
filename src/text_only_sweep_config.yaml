@@ -14,13 +14,13 @@ parameters:
   min_save_every:
     values: [1]
   n_workers:
-    values: [28]
+    values: [20]
   optimizer:
     values: ["adam"]
   dataset_size:
     values: [-1]
   seed:
-    values: [0, 1, 2, 3, 4]
+    values: [0, 1, 2]
   do_curriculum:
     values: [False]  # This is False for standard-finetuning.
   model_name:
@@ -36,9 +36,11 @@ parameters:
   fp16:
     values: [True]
   tokenizer_path:
-    values: ['./src/tokenizer/hf_wordpiece_tokenizer_from_git/']
-    #values: ['./src/tokenizer/hf_wordpiece_tokenizer_from_flamingo/']
+    values: ['./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/']
+    # TODO: See if the same tokenizer can be used for Flamingo.
   text_init_model_path:
     values: [None]
   load_optimizer:
     values: [False]
+  train_on_full_data:
+    values: [True]

@@ -32,7 +32,7 @@ torch.backends.cudnn.allow_tf32 = True
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=256)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
-parser.add_argument('--n_epochs', type=int, required=False, default=15)
+parser.add_argument('--n_epochs', type=int, required=False, default=20)
 parser.add_argument('--n_workers', type=int, required=False, default=20)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
@@ -49,10 +49,17 @@ parser.add_argument('--fp16', type=str, default=True)
 parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/')
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
-parser.add_argument('--train_on_full_data', action='store_true', help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
+parser.add_argument('--train_on_full_data', type=str, default=True, help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
 parser.add_argument('--text_only_training', type=int, required=False, default=1)  # This is always True for this script.
 
 args = parser.parse_args()
+
+if args.train_on_full_data == False or args.train_on_full_data == 'False':
+    args.train_on_full_data = False
+else:
+    args.train_on_full_data = True
+
+
 if args.load_optimizer == False or args.load_optimizer == 'False':
     args.load_optimizer = False
 else:
@@ -82,9 +89,9 @@ else:
 
 # Check tokenizer path for correct model.
 if args.model_name == 'git':
-    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_git/'
+    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
 elif args.model_name == 'flamingo':
-    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_flamingo/'
+    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
 
 
 batch_size = args.batch_size
@@ -133,8 +140,10 @@ root_level_path = os.getcwd() + '/'
 print("root_level_path: ", root_level_path)
 model_save_path = root_level_path + 'saved_models/'
 
-if args.initialize_with_text:
-    model_save_path += 'initialize_with_text/'
+# NOTE: This initialize_with_text condition is redundant because this is text_only_training.
+# and the assertion is always False.
+# if args.initialize_with_text:
+#     model_save_path += 'initialize_with_text/'
 
 if args.train_on_full_data:
     model_save_path += 'full_data/'
@@ -200,6 +209,7 @@ baby_model.to(device).train()
 # print(baby_model)
 do_val = True
 if args.train_on_full_data:
+    print("Because train_on_full_data is True, setting do_val to False.")
     do_val = False
 
 text_dataset_processor = TextDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
@@ -297,6 +307,16 @@ for epoch in epoch_iterator:
     # Print average loss at the end of the epoch.
     epoch_iterator.set_description(f'epoch: {epoch} per_epoch_loss: {epoch_loss}')
     # Log the average loss.
+    
+    if args.train_on_full_data:
+        # Save the model every 5 epochs.
+        if (epoch+1) % 5 == 0:
+            epoch_path = model_save_path + f'epoch_{epoch+1}/'
+            if not os.path.exists(epoch_path):
+                os.makedirs(epoch_path)
+            baby_model.save_model(epoch_path)
+            print("Model saved at epoch: ", epoch)
+        
 
     if not args.train_on_full_data:
         if epoch % min_save_every == 0:
@@ -347,6 +367,7 @@ for epoch in epoch_iterator:
             print("Train mode")
 
 if args.train_on_full_data:
+    model_save_path = model_save_path + 'final_model/'
     if not os.path.exists(model_save_path):
         os.makedirs(model_save_path)
     baby_model.save_model(model_save_path)
