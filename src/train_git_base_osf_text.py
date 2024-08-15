@@ -44,7 +44,7 @@ parser.add_argument('--use_accelerate', type=str, default=False)  # Whether to u
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
 parser.add_argument('--max_token_length', type=int, default=50)
 parser.add_argument('--initialize_with_text', type=str, default=False)
-parser.add_argument('--model_name', type=str, default='git')
+parser.add_argument('--model_name', type=str, default='flamingo')
 parser.add_argument('--fp16', type=str, default=True)
 parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/')
 parser.add_argument('--text_init_model_path', type=str, default=None)

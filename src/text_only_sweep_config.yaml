@@ -24,7 +24,7 @@ parameters:
   do_curriculum:
     values: [False]  # This is False for standard-finetuning.
   model_name:
-    values: ['git']
+    values: ['flamingo']  # Can be 'flamingo' or 'git'.
   model_type:
     values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
   max_token_length:

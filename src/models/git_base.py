@@ -136,20 +136,11 @@ class BabyFlamingoModel(nn.Module):
             model_outputs = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
         return model_outputs
 
-    def save_model(self, optimizer=None, model_save_path=None):
+    def save_model(self,model_save_path=None):
         assert model_save_path is not None, "Please provide a model_save_path."
         self.model.save_pretrained(model_save_path)
         print(f"Model saved at {model_save_path}")
-        
-        if optimizer is not None:
-            import os
-            if os.path.exists(model_save_path + "optim") == False:
-                os.makedirs(model_save_path + "optim")
-            torch.save(optimizer.state_dict(), model_save_path + "/optim/optimizer.pth")
-            print(f"Optimizer saved at {model_save_path}optim/optimizer.pth")
-            
-            
-            
+                    
 
 class BabyGitModel(nn.Module):
     
