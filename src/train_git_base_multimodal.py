@@ -27,10 +27,10 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, required=False, default=32)
+parser.add_argument('--batch_size', type=int, required=False, default=8)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=1)
-parser.add_argument('--n_workers', type=int, required=False, default=28)
+parser.add_argument('--n_workers', type=int, required=False, default=1)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--lr', type=float, required=False, default=1e-5)
@@ -47,7 +47,7 @@ parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wo
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
 parser.add_argument('--train_on_full_data', type=str, default=True, help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
-parser.add_argument('--wandb_mode', type=str, default='online', required=False)
+parser.add_argument('--wandb_mode', type=str, default='offline', required=False)
 
 args = parser.parse_args()
 
@@ -83,12 +83,8 @@ else:
     args.fp16 = True
 
 
-# Check tokenizer path for correct model.
-if args.model_name == 'git':
-    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
-elif args.model_name == 'flamingo':
-    assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
-
+# Must use this tokenizer.
+assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
 
 batch_size = args.batch_size
 dataset_size = args.dataset_size # negative for full dataset
@@ -138,6 +134,8 @@ model_save_path = root_level_path + 'saved_models/'
 
 if args.model_name == 'flamingo':
     model_save_path += 'flamingo/'
+elif args.model_name == 'git':
+    model_save_path += 'git/'
 
 
 if args.train_on_full_data:
@@ -147,22 +145,20 @@ if args.train_on_full_data:
 
 
 # NOTE: best_text_init_root_path must be assigned first. The ordering is important.
+
+if args.initialize_with_text:
+    best_text_init_root_path = model_save_path + f'text_only/standard/{args.model_type}/seed_{seed}/'
+    model_save_path += 'initialize_with_text/'
+    args.text_init_model_path = find_best_model_path(best_text_init_root_path)
+
+model_save_path += 'image_caption/'
+
 if not args.do_curriculum:
-    if args.initialize_with_text:
-        best_text_init_root_path = model_save_path + f'text_only/standard/{args.model_type}/seed_{seed}/'
-        model_save_path += 'initialize_with_text/'
     model_save_path += f'standard/{args.model_type}/seed_{seed}/'
 else:
-    if args.initialize_with_text:
-        best_text_init_root_path = model_save_path + f'text_only/curriculum/{args.model_type}/seed_{seed}/'
-        model_save_path += 'initialize_with_text/'
     model_save_path += f'curriculum/{args.model_type}/seed_{seed}/'
 
 
-if args.initialize_with_text:
-    # Find best model path from the best_text_init_root_path.
-    args.text_init_model_path = find_best_model_path(best_text_init_root_path)
-    
 model_save_path += f'{timestamp}_{random_dir}/'
 
 print(f'model_save_path: {model_save_path}')
@@ -228,8 +224,6 @@ multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size,
 
 best_loss = np.inf
 last_saved = -1
-test_images = None
-test_captions = None
 
 
 # full_dataset_length = len(multimodal_dataset_processor.train_dataloader)
@@ -276,8 +270,9 @@ for epoch in epoch_iterator:
     # Training.
     running_loss = 0.0
     average_running_loss = 0.0
+    batch_step = 0
     batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
-    for batch_step, (preprocessed_images, captions) in enumerate(training_dataloader):
+    for preprocessed_images, captions in training_dataloader:
 
         optimizer.zero_grad()
         try:
@@ -314,6 +309,8 @@ for epoch in epoch_iterator:
         if batch_step % 100 == 0:
             average_train_loss_per_batch = average_running_loss / (batch_step + 1)
             wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
+        
+        batch_step += 1
 
 
 

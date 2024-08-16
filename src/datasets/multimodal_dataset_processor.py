@@ -21,9 +21,9 @@ import asyncio
 from torch import Tensor
 
 TSV_URLS = {
-    'train': 'src/datasets/multimodal_train/all_multimodal_all_concaps.tsv',
-    'val': 'src/datasets/multimodal_train/all_multimodal_all_concaps.tsv',
-    'test': 'src/datasets/multimodal_train/all_multimodal_all_concaps.tsv'
+    'train': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv',
+    'val': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv',
+    'test': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv'
     # 'val': 'src/datasets/Train-GCC-training.tsv'
     # 'train': 'https://storage.cloud.google.com/gcc-data/Train/GCC-training.tsv?_ga=2.191230122.-1896153081.1529438250'
 }
@@ -110,7 +110,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
             assert len(indices_train_set.intersection(indices_val_set)) == 0
             print("No overlap between the indices of the train and val sets.")
         else:
-            self.train_indices = self.full_range[:].tolist()
+            self.train_indices = self.full_range[:]
             self.val_indices = []
             self.val_dataset = None
 
