@@ -21,7 +21,7 @@ import asyncio
 from torch import Tensor
 
 TSV_URLS = {
-    'train': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv',
+    'train': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv',
     'val': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv',
     'test': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv'
     # 'val': 'src/datasets/Train-GCC-training.tsv'
@@ -195,7 +195,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices)
 
         batch_size = self.batch_size
-        self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
+        self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True)
 
     def load_val_dataset(self):
 

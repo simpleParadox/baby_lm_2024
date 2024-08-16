@@ -21,16 +21,14 @@ import os
 import wandb
 import argparse  # This is necessary for wandb sweeps.
 
-# torch.backends.cudnn.deterministic = True
-# torch.use_deterministic_algorithms(True)
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
+
+
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, required=False, default=8)
+parser.add_argument('--batch_size', type=int, required=False, default=64)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=1)
-parser.add_argument('--n_workers', type=int, required=False, default=1)
+parser.add_argument('--n_workers', type=int, required=False, default=10)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--lr', type=float, required=False, default=1e-5)
@@ -112,6 +110,17 @@ elif args.model_type == 'sequence':
     baseline_sequence_classification = True
 else:
     raise ValueError('model_type should be either causal_lm or sequence.')
+
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = True
+torch.use_deterministic_algorithms(True)
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
 
 # Initialize wandb.
 wandb.init(project='babylm_2024', mode=args.wandb_mode)
@@ -298,7 +307,7 @@ for epoch in epoch_iterator:
             loss.backward()
             optimizer.step()
 
-        running_loss += (loss.item() * input_ids["input_ids"].shape[0])
+        running_loss += (loss.item() * input_ids.size(0))
         average_running_loss += loss.item()
 
         batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')

@@ -1,6 +1,6 @@
 """
 Use the following command to run the script:
-CUDA_VISIBLE_DEVICES=1,2,3,4,5 python src/taggers/reimplementation_kaggle_bert_pos_tagging.py --batch_size 512 --num_train_epochs 5 --seed 0 --train_on_full_data
+CUDA_VISIBLE_DEVICES=2 python src/taggers/reimplementation_kaggle_bert_pos_tagging.py --batch_size 512 --num_train_epochs 5 --seed 2 --train_on_full_data
 """
 
 import warnings
@@ -39,7 +39,6 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 
-
 wandb.init(project="train_bert_pos_tagger")
 # wandb.init(project="train_bert_pos_tagger", mode='disabled')
 
@@ -49,6 +48,9 @@ print("Number of files: ", len(paths))
 
 file_names = []
 
+# Log the args to wandb.
+args_dict = vars(args)
+wandb.log(args_dict)
 
 for path in tqdm(paths, desc="Paths"):
 
@@ -134,7 +136,7 @@ def tokenize_and_align_labels(examples):
     split_tokenized_inputs = [
         tokenizer.tokenize(e, truncation=True, 
                            is_split_into_words=True, 
-                           max_length=5, 
+                           max_length=50, 
                            add_special_tokens=True) for e in examples['sentence']]
     # Increase unk_count if the tokenized inputs contain [UNK]
     global unk_count
@@ -205,13 +207,13 @@ train_dataloader = DataLoader(
     shuffle=True,
     collate_fn=data_collator,
     batch_size=batch_size,
-    num_workers=2
+    num_workers=28
 )
 eval_dataloader = None
 if not args.train_on_full_data:
     eval_dataloader = DataLoader(
         df_dataset_tokenized_eval, collate_fn=data_collator, batch_size=batch_size,
-        num_workers=2
+        num_workers=20
     )
 
 from torch.optim import AdamW, Adam
@@ -255,6 +257,10 @@ def postprocess(predictions, labels):
         for prediction, label in zip(predictions, labels)
     ]
     return true_labels, true_predictions
+
+
+
+
 
 
 seed = args.seed

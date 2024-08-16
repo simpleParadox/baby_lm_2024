@@ -1,8 +1,15 @@
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer
 
 # processor = AutoProcessor.from_pretrained("babylm/git-2024", trust_remote_code=True)
-processor = AutoProcessor.from_pretrained("microsoft/git-base")
-tokenizer = processor.tokenizer
+
+model = 'flamingo'
+if model == 'git':
+    processor = AutoProcessor.from_pretrained("microsoft/git-base")
+    tokenizer = processor.tokenizer
+elif model == 'flamingo':
+    tokenizer = AutoTokenizer.from_pretrained("babylm/flamingo-2024", trust_remote_code=True)
+
+print("Model: ", model)
 print("Tokenizer: ", tokenizer)
 from pathlib import Path
 # From the paths variable, create a new pandas with one column called 'text'.
@@ -60,5 +67,5 @@ def get_training_corpus():  # Get in batches of 1000.
 training_corpus = get_training_corpus()
 # Train 
 tokenizer.train_new_from_iterator(training_corpus, vocab_size=32768)
-tokenizer.save_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/")
+tokenizer.save_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_tokenizer_from_babylm_flamingo/")
 # tokenizer.train_new_from_iterator(get_training_corpus, vocab_size=30522, min_frequency=2, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
