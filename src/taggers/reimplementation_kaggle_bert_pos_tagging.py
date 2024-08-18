@@ -1,6 +1,6 @@
 """
 Use the following command to run the script:
-CUDA_VISIBLE_DEVICES=2 python src/taggers/reimplementation_kaggle_bert_pos_tagging.py --batch_size 512 --num_train_epochs 5 --seed 2 --train_on_full_data
+CUDA_VISIBLE_DEVICES=5 python src/taggers/reimplementation_kaggle_bert_pos_tagging.py --batch_size 512 --num_train_epochs 5 --seed 1 --train_on_full_data
 """
 
 import warnings
@@ -42,7 +42,7 @@ torch.backends.cudnn.benchmark = False
 wandb.init(project="train_bert_pos_tagger")
 # wandb.init(project="train_bert_pos_tagger", mode='disabled')
 
-data_dir = Path("/home/rsaha/projects/babylm/src/taggers/data/")
+data_dir = Path("/home/rsaha/projects/babylm/src/taggers/data_for_training/")
 paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"]]
 print("Number of files: ", len(paths))
 
@@ -63,13 +63,13 @@ for path in tqdm(paths, desc="Paths"):
 data = []
 if args.test_run:
     print("Test run: ", args.test_run)
-    temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data/pos_tagging_dataset_all_sentences_switchboard.pkl", "rb"))
+    temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data_for_training/pos_tagging_dataset_all_sentences_switchboard.pkl", "rb"))
     data.extend(temp_data)
 else:
     for file_name in tqdm(file_names):
         print("Using all the files.")
         print(file_name)
-        temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data/{file_name}.pkl", "rb"))
+        temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data_for_training/{file_name}.pkl", "rb"))
         data.extend(temp_data)
 print("Length of data: ", len(data))
 
@@ -154,7 +154,7 @@ def tokenize_and_align_labels(examples):
     return tokenized_inputs
 
 df_dataset_tokenized_train = df_dataset_train.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=20)
+                                      remove_columns=df_dataset_train.column_names, num_proc=6)
 if not args.train_on_full_data:
     df_dataset_tokenized_eval = df_dataset_val.map(tokenize_and_align_labels, batched=True,
                                         remove_columns=df_dataset_train.column_names, num_proc=20)
@@ -216,7 +216,7 @@ if not args.train_on_full_data:
         num_workers=20
     )
 
-from torch.optim import AdamW, Adam
+from torch.optim import Adam
 
 optimizer = Adam(model.parameters(), lr=1e-5)
 

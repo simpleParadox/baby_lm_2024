@@ -17,19 +17,18 @@ from transformers import DataCollatorForTokenClassification
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Read the .tsv file and store it in a pandas dataframe.
-df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
+# df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
 
+# TODO: Fix the seed for this model.
+seed = 0
 # Load the POS tagger model and tokenizer.
-model = AutoModelForTokenClassification.from_pretrained("/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_full_data/seed_0/model_after_training_5_epochs/")
+model = AutoModelForTokenClassification.from_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_full_data/seed_{seed}/model_after_training_5_epochs/")
 tokenizer = PreTrainedTokenizerFast.from_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/")
 
-# Put model to device.
-model.to(device)
 
-model.eval()
-
-data_dir = Path("/home/rsaha/projects/babylm/src/taggers/data/")
-paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"] and f.name in ["pos_tagging_dataset_all_sentences_cc_3M_captions_non_reduced_filtered.pkl", "pos_tagging_dataset_all_sentences_local_narr_captions.pkl"]]
+data_dir = Path("/home/rsaha/projects/babylm/src/data_for_training/")
+# paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"] and f.name in ["pos_tagging_dataset_all_sentences_cc_3M_captions_non_reduced_filtered.pkl", "pos_tagging_dataset_all_sentences_local_narr_captions.pkl"]]
+paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"] and f.name in ["pos_tagging_dataset_all_captions_for_inference_all_concaps_tsv.pkl"]]
 print("Number of files: ", len(paths))
 
 
@@ -47,10 +46,11 @@ data = []
 for file_name in tqdm(file_names):
     print("Using all the files.")
     print(file_name)
-    temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data/{file_name}.pkl", "rb"))
+    temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/data/{file_name}.pkl", "rb"))
     data.extend(temp_data)
 print("Length of data: ", len(data))
 
+assert len(data) == 3043190 # This is the number of samples in the all_concaps.tsv file.
 
 
 # Create a dictionary of numbers where each tag (the second element in the tuple) is assigned a unique number. This will be the class labels.
@@ -59,23 +59,19 @@ label_names = {t: i for i, t in enumerate(tagdict.keys())}
 label_names['#'] = len(label_names)
 
 # Remove all the empty lists from data.
-data = [d for d in data if d [0]!= []]
+## data = [d for d in data if d [0]!= []]
 
 
 tag_to_class_mapping_for_data = []
 for i in tqdm(range(len(data))):
     tag_to_class_mapping_for_data.append([label_names[tag] for tag in data[i][1]])
 
-import pandas as pd
+# import pandas as pd
 df = pd.DataFrame(data, columns=["sentence", "tags"])
 df["class_labels"] = tag_to_class_mapping_for_data
 
-
-
-train_df = df
-
 from datasets import Dataset
-df_dataset_train = Dataset.from_pandas(train_df)
+df_dataset_train = Dataset.from_pandas(df)
 
 
 
@@ -102,7 +98,7 @@ def align_labels_with_tokens(labels, word_ids):
 def tokenize_and_align_labels(examples):
     # print("Example sentence:  ", examples["sentence"])
     tokenized_inputs = tokenizer(
-        examples["sentence"], truncation=True, is_split_into_words=True, max_length=50
+        examples["sentence"], truncation=True, is_split_into_words=False, max_length=50
     )
     all_labels = examples["class_labels"]
     new_labels = []
@@ -117,14 +113,7 @@ df_dataset_tokenized_train = df_dataset_train.map(tokenize_and_align_labels, bat
                                       remove_columns=df_dataset_train.column_names, num_proc=28)
 
 
-data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
-train_dataloader = DataLoader(
-    df_dataset_tokenized_train,
-    shuffle=False,
-    collate_fn=data_collator,
-    batch_size=512,
-    num_workers=28
-)
+
 
 id2label = {i: label for i, label in enumerate(label_names.keys())}
 label2id = {v: k for k, v in id2label.items()}  # This is nothing but the label_names dictionary. But keeping it like this for consistency with the Kaggle notebook.
@@ -165,6 +154,15 @@ def postprocess(predictions, labels):
     return true_labels, true_predictions
 
 
+data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
+train_dataloader = DataLoader(
+    df_dataset_tokenized_train,
+    shuffle=False,
+    collate_fn=data_collator,
+    batch_size=512,
+    num_workers=28
+)
+
 
 
 accelerator = Accelerator(mixed_precision="fp16")
@@ -181,16 +179,106 @@ for batch in tqdm(train_dataloader):
         outputs = model(**batch)
     predictions = outputs.logits.argmax(dim=-1)
     labels = batch["labels"]
+
     # Necessary to pad predictions and labels for being gathered
     predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
-    labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
     predictions_gathered = accelerator.gather(predictions)
     labels_gathered = accelerator.gather(labels)
     true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
-    metric.add_batch(predictions=true_predictions, references=true_labels)
     pos_tags.extend(true_predictions)
-    pos_labels.extend(true_labels)
 
+
+
+
+
+
+"""
+Recoding the inference pipeline.
+"""
+def postprocess_for_inference(predictions, labels):
+    predictions = predictions.detach().cpu().clone().numpy()
+    labels = labels.detach().cpu().clone().numpy()
+    # Remove ignored index (special tokens) and convert to labels
+    true_labels = [[id2label[l] for l in label if l != -100] for label in labels]
+    true_predictions = [
+        [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    return true_labels, true_predictions
+# Load the captions data.
+df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
+
+def tokenize_and_align_labels_for_inference(examples):
+    # print("Example sentence:  ", examples["sentence"])
+    tokenized_inputs = tokenizer(
+        examples["caption"], truncation=True, is_split_into_words=False, max_length=50, return_tensors="pt"
+    )
+    return tokenized_inputs
+
+
+
+df_dataset_tokenized_train = df.map(tokenize_and_align_labels, batched=True,
+                                      remove_columns=df.column_names, num_proc=28)
+
+
+data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
+train_dataloader = DataLoader(
+    df_dataset_tokenized_train,
+    shuffle=False,
+    collate_fn=data_collator,
+    batch_size=512,
+    num_workers=28
+)
+
+accelerator = Accelerator(mixed_precision="fp16")
+model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
+    model, None, train_dataloader, None
+)
+
+pos_tags = []
+pos_labels = []
+
+for batch in tqdm(train_dataloader):
+    batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+    with torch.no_grad():
+        outputs = model(**batch)
+    predictions = outputs.logits.argmax(dim=-1)
+    labels = batch["labels"]
+
+    # Necessary to pad predictions and labels for being gathered
+    predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
+    predictions_gathered = accelerator.gather(predictions)
+    labels_gathered = accelerator.gather(labels)
+    true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
+    pos_tags.extend(true_predictions)
+
+dump(pos_tags, f"/home/rsaha/projects/babylm/src/taggers/predicted_pos_tags_from_bert_tagger_captions_only_upenn_all_concaps_seed_{seed}.pkl")
+
+"""
+Test code.
+"""
+# TODO: Make this work.
+df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
+seed = 0
+model = AutoModelForTokenClassification.from_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_full_data/seed_{seed}/model_after_training_5_epochs/")
+tokenizer = PreTrainedTokenizerFast.from_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/")
+
+# Get the caption with the shortest length.
+min_length = 100000
+min_length_caption = ""
+for caption in df["caption"]:
+    if len(caption) < min_length:
+        min_length = len(caption)
+        min_length_caption = caption
+        
+inputs = tokenizer(min_length_caption, return_tensors="pt")        
+
+with torch.no_grad():
+    logits = model(**inputs).logits
+
+predictions = torch.argmax(logits, dim=2)
+predicted_token_class = [model.config.id2label[t.item()] for t in predictions[0]]
+predicted_token_class
 
 # from joblib import dump, load
 
