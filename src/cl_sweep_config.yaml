@@ -1,29 +1,45 @@
-program: train_git_base_multimodal.py
-name: baseline
+program: src/train_git_base_multimodal.py
+name: baseline_multimodal_cl
 method: grid
 metric:
   goal: minimize
   name: val_loss
 parameters:
   lr:
-    values: [1e-5, 2e-5, 3e-5, 4e-5, 5e-5]
+    values: [1e-5]
   batch_size:
     values: [32]
   n_epochs:
-    values: [50]
+    values: [10]
   min_save_every:
-    values: [200]
+    values: [5]
   n_workers:
-    values: [30]
+    values: [10]
   optimizer:
     values: ["adam"]
+  do_curriculum:
+    values: [True]  # This is True for CL.
   dataset_size:
     values: [-1]
   seed:
-    values: [0, 1, 2, 3, 4]
+    values: [0, 1, 2]
   do_curriculum:
-    values: [True]  # This is True for curriculum learning.
+    values: [False]  # This is False for standard-finetuning.
+  model_name:
+    values: ['git']
   model_type:
     values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
   max_token_length:
     values: [50]
+  initialize_with_text:
+    values: [False]
+  use_accelerate:
+    values: [False]
+  fp16:
+    values: [True]
+  load_optimizer:
+    values: [False]
+  train_on_full_data:
+    values: [True]
+  wandb_mode:
+    values: ['online']

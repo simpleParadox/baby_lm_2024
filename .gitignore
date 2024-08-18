@@ -73,3 +73,4 @@ scripts.sh
 
 /src/taggers/bert-base-uncased_tagger_checkpoints*
 /src/tokenizer/hf_tokenizer_from_babylm_flamingo/
+/src/taggers/*.pkl

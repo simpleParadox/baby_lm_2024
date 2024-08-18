@@ -9,7 +9,10 @@ from pathlib import Path
 from nltk.data import load as nltk_load
 import pickle
 import evaluate
-from torch.data.utils import DataLoader
+from torch.utils.data import DataLoader
+from accelerate import Accelerator
+import os
+from transformers import DataCollatorForTokenClassification
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -34,7 +37,6 @@ file_names = []
 
 
 for path in tqdm(paths, desc="Paths"):
-
     file_name = Path(path).name
     # Drop the .train extension
     file_name = file_name.split(".")[0]
@@ -48,6 +50,8 @@ for file_name in tqdm(file_names):
     temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data/{file_name}.pkl", "rb"))
     data.extend(temp_data)
 print("Length of data: ", len(data))
+
+
 
 # Create a dictionary of numbers where each tag (the second element in the tuple) is assigned a unique number. This will be the class labels.
 tagdict = nltk_load('help/tagsets/upenn_tagset.pickle')
@@ -95,43 +99,30 @@ def align_labels_with_tokens(labels, word_ids):
     return new_labels
 
 # %%
-unk_count = 0
 def tokenize_and_align_labels(examples):
     # print("Example sentence:  ", examples["sentence"])
     tokenized_inputs = tokenizer(
         examples["sentence"], truncation=True, is_split_into_words=True, max_length=50
     )
-    split_tokenized_inputs = [
-        tokenizer.tokenize(e, truncation=True, 
-                           is_split_into_words=True, 
-                           max_length=5, 
-                           add_special_tokens=True) for e in examples['sentence']]
-    # Increase unk_count if the tokenized inputs contain [UNK]
-    global unk_count
-    for split in split_tokenized_inputs:
-        if "[UNK]" in split:
-            unk_count += 1
     all_labels = examples["class_labels"]
     new_labels = []
     for i, labels in enumerate(all_labels):
         word_ids = tokenized_inputs.word_ids(i)
         # print("Word IDs: ", word_ids)
         new_labels.append(align_labels_with_tokens(labels, word_ids))
-
     tokenized_inputs["labels"] = new_labels
     return tokenized_inputs
 
 df_dataset_tokenized_train = df_dataset_train.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=20)
+                                      remove_columns=df_dataset_train.column_names, num_proc=28)
 
 
-
-
+data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 train_dataloader = DataLoader(
     df_dataset_tokenized_train,
-    shuffle=True,
+    shuffle=False,
     collate_fn=data_collator,
-    batch_size=batch_size,
+    batch_size=512,
     num_workers=28
 )
 
@@ -145,7 +136,6 @@ metric = evaluate.load("seqeval")
 def compute_metrics(eval_preds):
     logits, labels = eval_preds
     predictions = np.argmax(logits, axis=-1)
-
     # Remove ignored index (special tokens) and convert to labels
     true_labels = [[id2label[l] for l in label if l != -100] for label in labels]
     true_predictions = [
@@ -162,11 +152,82 @@ def compute_metrics(eval_preds):
 
 
 
+
+def postprocess(predictions, labels):
+    predictions = predictions.detach().cpu().clone().numpy()
+    labels = labels.detach().cpu().clone().numpy()
+    # Remove ignored index (special tokens) and convert to labels
+    true_labels = [[id2label[l] for l in label if l != -100] for label in labels]
+    true_predictions = [
+        [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    return true_labels, true_predictions
+
+
+
+
+accelerator = Accelerator(mixed_precision="fp16")
+model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
+    model, None, train_dataloader, None
+)
+
 pos_tags = []
-for example in tqdm(df_dataset_tokenized_train):
-    inputs = example['input_ids']
-    attention_mask = example['attention_mask']
+pos_labels = []
+
+for batch in tqdm(train_dataloader):
+    batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
     with torch.no_grad():
-        outputs = model(inputs.unsqueeze(0), attention_mask=attention_mask.unsqueeze(0))
-    predicted_labels = torch.argmax(outputs.logits, dim=-1).squeeze().tolist()
-    pos_tags.append([id2label[label] for label in predicted_labels])
+        outputs = model(**batch)
+    predictions = outputs.logits.argmax(dim=-1)
+    labels = batch["labels"]
+    # Necessary to pad predictions and labels for being gathered
+    predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
+    labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
+    predictions_gathered = accelerator.gather(predictions)
+    labels_gathered = accelerator.gather(labels)
+    true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
+    metric.add_batch(predictions=true_predictions, references=true_labels)
+    pos_tags.extend(true_predictions)
+    pos_labels.extend(true_labels)
+
+
+# from joblib import dump, load
+
+# # Save the pos_tags and pos_labels.
+# dump(pos_tags, "/home/rsaha/projects/babylm/src/taggers/predicted_pos_tags_from_bert_tagger_captions_only_upenn.pkl")
+# dump(pos_labels, "/home/rsaha/projects/babylm/src/taggers/true_pos_labels_captions_only_upenn.pkl")
+    
+
+# For each item in the pos_tags list, create a new list that stores the corresponding number of nouns (with the NN, and NNP tags).
+from joblib import load, dump
+pos_tags = load("/home/rsaha/projects/babylm/src/taggers/predicted_pos_tags_from_bert_tagger_captions_only_upenn.pkl")
+noun_counts = []
+for tags in tqdm(pos_tags):
+    noun_count = 0
+    for tag in tags:
+        if tag == "NN" or tag == "NNP":
+            noun_count += 1
+    noun_counts.append(noun_count)
+dump(noun_counts, "/home/rsaha/projects/babylm/data/noun_counts_difficulty_captions_only_full_data_upenn.pkl")
+# Create a histogram of the noun_counts in seaborn.
+df = pd.DataFrame(noun_counts, columns=["noun_counts"])
+plt.clf()
+fig, ax = plt.subplots(figsize=(15, 10))
+# plt.hist(noun_counts, bins=20)
+sns.histplot(ax=ax, data=df, x="noun_counts", discrete=True, cumulative=True)
+plt.xlabel("Difficulty: Number of Nouns")
+plt.ylabel("Frequency")
+
+# Now add the count above each bar in the histogram.
+# Create a list to store the frequency of each bin.
+frequency = []
+for i in range(0, 21):
+    frequency.append(noun_counts.count(i))
+for i in range(0, 21):
+    plt.text(i, frequency[i], frequency[i], ha='center', va='bottom', rotation=90)
+
+
+plt.title("Difficulty as measured by the number of nouns")
+plt.tight_layout()
+plt.savefig("/home/rsaha/projects/babylm/difficulty_histogram_nouns_captions_only_bert_pos_tagger_cumulative.png")

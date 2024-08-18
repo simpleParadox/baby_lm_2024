@@ -25,9 +25,9 @@ import argparse  # This is necessary for wandb sweeps.
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, required=False, default=64)
+parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
-parser.add_argument('--n_epochs', type=int, required=False, default=1)
+parser.add_argument('--n_epochs', type=int, required=False, default=10)
 parser.add_argument('--n_workers', type=int, required=False, default=10)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
@@ -45,7 +45,7 @@ parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wo
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
 parser.add_argument('--train_on_full_data', type=str, default=True, help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
-parser.add_argument('--wandb_mode', type=str, default='offline', required=False)
+parser.add_argument('--wandb_mode', type=str, default='online', required=False)
 
 args = parser.parse_args()
 
@@ -81,7 +81,7 @@ else:
     args.fp16 = True
 
 
-# Must use this tokenizer.
+# Must use this tokenizer for both GIT and Flamingo.
 assert args.tokenizer_path == './src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/'
 
 batch_size = args.batch_size
@@ -323,6 +323,10 @@ for epoch in epoch_iterator:
 
 
 
+        
+    epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
+    wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
+    
     best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
     # Save the args_dict in the same directory as json.
     if not os.path.exists(model_save_path):
@@ -330,14 +334,10 @@ for epoch in epoch_iterator:
     with open(model_save_path + 'best_args.json', 'w') as f:
         json.dump(best_args, f)
         print("Args saved.")
-        
-    epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
-    wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
-    
     
     if args.train_on_full_data:
         # Save the model every 5 epochs.
-        if (epoch+1) % 5 == 0:
+        if (epoch+1) % min_save_every == 0:
             epoch_path = model_save_path + f'epoch_{epoch+1}/'
             if not os.path.exists(epoch_path):
                 os.makedirs(epoch_path)

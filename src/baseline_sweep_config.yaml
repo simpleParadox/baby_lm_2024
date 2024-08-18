@@ -10,17 +10,19 @@ parameters:
   batch_size:
     values: [32]
   n_epochs:
-    values: [5]
+    values: [10]
   min_save_every:
-    values: [200]
+    values: [5]
   n_workers:
-    values: [28]
+    values: [10]
   optimizer:
     values: ["adam"]
+  do_curriculum:
+    values: [False]  # This is False for standard pre-training.
   dataset_size:
     values: [-1]
   seed:
-    values: [0, 1, 2, 3, 4]
+    values: [0, 1, 2]
   do_curriculum:
     values: [False]  # This is False for standard-finetuning.
   model_name:
@@ -35,3 +37,9 @@ parameters:
     values: [False]
   fp16:
     values: [True]
+  load_optimizer:
+    values: [False]
+  train_on_full_data:
+    values: [True]
+  wandb_mode:
+    values: ['online']

@@ -82,6 +82,8 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
         # Create ranges for train / val / test splits.
         self.full_range = np.arange(0, 3043190)  # 2851072 is the number of samples in the all_multimodal.tsv file.
+        if dataset_size > 0:
+            self.full_range = np.arange(0, dataset_size)
 
         if do_val:
             # Set the split ratios
