@@ -63,7 +63,8 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     
 
-    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=42, processor=None, do_val=True) -> None:
+    def __init__(self, device='cuda:0', batch_size=64, dataset_size=-1, n_workers=3, manual_seed=42, processor=None, do_val=True,
+                 do_curriculum=False) -> None:
 
         self.train_data_pipe: IterDataPipe = None
         self.val_data_pipe: IterDataPipe = None
@@ -124,7 +125,10 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
 
         # always need to first load train then load val dataset. Fix this confusing requirement later
-        self.load_train_dataset()
+        if not do_curriculum:
+            self.load_train_dataset()
+        else:
+            self.load_curriculum_dataset()
         if do_val:
             self.load_val_dataset()
         
@@ -190,8 +194,9 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         random.seed(worker_seed)
 
 
-
-
+    def load_curriculum_dataset(self):
+        raise NotImplementedError
+        
     def load_train_dataset(self):
 
         self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices)

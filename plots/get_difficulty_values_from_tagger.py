@@ -19,14 +19,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Read the .tsv file and store it in a pandas dataframe.
 # df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
 
-# TODO: Fix the seed for this model.
-seed = 0
-# Load the POS tagger model and tokenizer.
-model = AutoModelForTokenClassification.from_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_full_data/seed_{seed}/model_after_training_5_epochs/")
-tokenizer = PreTrainedTokenizerFast.from_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/")
 
 
-data_dir = Path("/home/rsaha/projects/babylm/src/data_for_training/")
+data_dir = Path("/home/rsaha/projects/babylm/src/taggers/data_for_training/")
 # paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"] and f.name in ["pos_tagging_dataset_all_sentences_cc_3M_captions_non_reduced_filtered.pkl", "pos_tagging_dataset_all_sentences_local_narr_captions.pkl"]]
 paths = [str(f) for f in data_dir.glob("*") if f.is_file() and not f.name.endswith(".DS_Store") and f.suffix in [".pkl"] and f.name in ["pos_tagging_dataset_all_captions_for_inference_all_concaps_tsv.pkl"]]
 print("Number of files: ", len(paths))
@@ -46,7 +41,7 @@ data = []
 for file_name in tqdm(file_names):
     print("Using all the files.")
     print(file_name)
-    temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/data/{file_name}.pkl", "rb"))
+    temp_data = pickle.load(open(f"/home/rsaha/projects/babylm/src/taggers/data_for_training/{file_name}.pkl", "rb"))
     data.extend(temp_data)
 print("Length of data: ", len(data))
 
@@ -98,7 +93,7 @@ def align_labels_with_tokens(labels, word_ids):
 def tokenize_and_align_labels(examples):
     # print("Example sentence:  ", examples["sentence"])
     tokenized_inputs = tokenizer(
-        examples["sentence"], truncation=True, is_split_into_words=False, max_length=50
+        examples["sentence"], truncation=True, is_split_into_words=True, max_length=50 # NOTE: is_split_into_words=False is important.
     )
     all_labels = examples["class_labels"]
     new_labels = []
@@ -110,7 +105,7 @@ def tokenize_and_align_labels(examples):
     return tokenized_inputs
 
 df_dataset_tokenized_train = df_dataset_train.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df_dataset_train.column_names, num_proc=28)
+                                      remove_columns=df_dataset_train.column_names, num_proc=10)
 
 
 
@@ -160,134 +155,61 @@ train_dataloader = DataLoader(
     shuffle=False,
     collate_fn=data_collator,
     batch_size=512,
-    num_workers=28
+    num_workers=4
 )
 
+df_original = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
 
-
-accelerator = Accelerator(mixed_precision="fp16")
-model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
-    model, None, train_dataloader, None
-)
-
-pos_tags = []
-pos_labels = []
-
-for batch in tqdm(train_dataloader):
-    batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
-    with torch.no_grad():
-        outputs = model(**batch)
-    predictions = outputs.logits.argmax(dim=-1)
-    labels = batch["labels"]
-
-    # Necessary to pad predictions and labels for being gathered
-    predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
-    predictions_gathered = accelerator.gather(predictions)
-    labels_gathered = accelerator.gather(labels)
-    true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
-    pos_tags.extend(true_predictions)
-
-
-
-
-
-
-"""
-Recoding the inference pipeline.
-"""
-def postprocess_for_inference(predictions, labels):
-    predictions = predictions.detach().cpu().clone().numpy()
-    labels = labels.detach().cpu().clone().numpy()
-    # Remove ignored index (special tokens) and convert to labels
-    true_labels = [[id2label[l] for l in label if l != -100] for label in labels]
-    true_predictions = [
-        [id2label[p] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    return true_labels, true_predictions
-# Load the captions data.
-df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
-
-def tokenize_and_align_labels_for_inference(examples):
-    # print("Example sentence:  ", examples["sentence"])
-    tokenized_inputs = tokenizer(
-        examples["caption"], truncation=True, is_split_into_words=False, max_length=50, return_tensors="pt"
-    )
-    return tokenized_inputs
-
-
-
-df_dataset_tokenized_train = df.map(tokenize_and_align_labels, batched=True,
-                                      remove_columns=df.column_names, num_proc=28)
-
-
-data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
-train_dataloader = DataLoader(
-    df_dataset_tokenized_train,
-    shuffle=False,
-    collate_fn=data_collator,
-    batch_size=512,
-    num_workers=28
-)
-
-accelerator = Accelerator(mixed_precision="fp16")
-model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
-    model, None, train_dataloader, None
-)
-
-pos_tags = []
-pos_labels = []
-
-for batch in tqdm(train_dataloader):
-    batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
-    with torch.no_grad():
-        outputs = model(**batch)
-    predictions = outputs.logits.argmax(dim=-1)
-    labels = batch["labels"]
-
-    # Necessary to pad predictions and labels for being gathered
-    predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
-    predictions_gathered = accelerator.gather(predictions)
-    labels_gathered = accelerator.gather(labels)
-    true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
-    pos_tags.extend(true_predictions)
-
-dump(pos_tags, f"/home/rsaha/projects/babylm/src/taggers/predicted_pos_tags_from_bert_tagger_captions_only_upenn_all_concaps_seed_{seed}.pkl")
-
-"""
-Test code.
-"""
-# TODO: Make this work.
-df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps.tsv", sep="\t", compression='gzip')
-seed = 0
+# TODO: Fix the seed for this model.
+seed = 2
+# Load the POS tagger model and tokenizer.
 model = AutoModelForTokenClassification.from_pretrained(f"/home/rsaha/projects/babylm/src/taggers/bert-base-uncased_tagger_checkpoints_full_data/seed_{seed}/model_after_training_5_epochs/")
 tokenizer = PreTrainedTokenizerFast.from_pretrained("/home/rsaha/projects/babylm/src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/")
 
-# Get the caption with the shortest length.
-min_length = 100000
-min_length_caption = ""
-for caption in df["caption"]:
-    if len(caption) < min_length:
-        min_length = len(caption)
-        min_length_caption = caption
-        
-inputs = tokenizer(min_length_caption, return_tensors="pt")        
 
-with torch.no_grad():
-    logits = model(**inputs).logits
 
-predictions = torch.argmax(logits, dim=2)
-predicted_token_class = [model.config.id2label[t.item()] for t in predictions[0]]
-predicted_token_class
+accelerator = Accelerator(mixed_precision="fp16")
+model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
+    model, None, train_dataloader, None
+)
 
-# from joblib import dump, load
+pos_tags = []
+pos_labels = []
+for batch in tqdm(train_dataloader):
+    batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+    with torch.no_grad():
+        outputs = model(**batch)
+    predictions = outputs.logits.argmax(dim=-1)
+    labels = batch["labels"]
+    # Necessary to pad predictions and labels for being gathered
+    predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
+    labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
+    predictions_gathered = accelerator.gather(predictions)
+    labels_gathered = accelerator.gather(labels)
+    true_predictions, true_labels = postprocess(predictions_gathered, labels_gathered)
+    pos_tags.extend(true_predictions)
 
-# # Save the pos_tags and pos_labels.
-# dump(pos_tags, "/home/rsaha/projects/babylm/src/taggers/predicted_pos_tags_from_bert_tagger_captions_only_upenn.pkl")
-# dump(pos_labels, "/home/rsaha/projects/babylm/src/taggers/true_pos_labels_captions_only_upenn.pkl")
+
+from joblib import dump, load
+dump(pos_tags, f"/home/rsaha/projects/babylm/src/taggers/predicted_pos_tags_from_bert_tagger_captions_only_upenn_all_concaps_seed_{seed}.pkl")
+
+noun_counts = []
+for tags in tqdm(pos_tags):
+    noun_count = 0
+    for tag in tags:
+        if tag == "NN" or tag == "NNP":
+            noun_count += 1
+    noun_counts.append(noun_count)
     
+df_original[f"noun_counts_seed_{seed}"] = noun_counts
+df_original.to_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts.tsv", sep="\t", index=False)
 
-# For each item in the pos_tags list, create a new list that stores the corresponding number of nouns (with the NN, and NNP tags).
+
+
+
+
+
+# # For each item in the pos_tags list, create a new list that stores the corresponding number of nouns (with the NN, and NNP tags).
 from joblib import load, dump
 pos_tags = load("/home/rsaha/projects/babylm/src/taggers/predicted_pos_tags_from_bert_tagger_captions_only_upenn.pkl")
 noun_counts = []
@@ -299,23 +221,53 @@ for tags in tqdm(pos_tags):
     noun_counts.append(noun_count)
 dump(noun_counts, "/home/rsaha/projects/babylm/data/noun_counts_difficulty_captions_only_full_data_upenn.pkl")
 # Create a histogram of the noun_counts in seaborn.
-df = pd.DataFrame(noun_counts, columns=["noun_counts"])
+
+
+
+# Directly load the difficulty scores from the dataframe because the noun_counts are already stored as separate columns in the .tsv file.
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns   
+import numpy as np
+df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts.tsv", sep="\t")
+
+seed = 2
+fontsize = 30
 plt.clf()
 fig, ax = plt.subplots(figsize=(15, 10))
 # plt.hist(noun_counts, bins=20)
-sns.histplot(ax=ax, data=df, x="noun_counts", discrete=True, cumulative=True)
-plt.xlabel("Difficulty: Number of Nouns")
-plt.ylabel("Frequency")
+sns.histplot(ax=ax, data=df, x=f"noun_counts_seed_{seed}", discrete=True, cumulative=True)
+plt.xlabel("Difficulty: Number of Nouns", fontsize=fontsize)
+plt.ylabel("Frequency", fontsize=fontsize)
 
 # Now add the count above each bar in the histogram.
 # Create a list to store the frequency of each bin.
-frequency = []
-for i in range(0, 21):
-    frequency.append(noun_counts.count(i))
-for i in range(0, 21):
-    plt.text(i, frequency[i], frequency[i], ha='center', va='bottom', rotation=90)
+noun_counts = df[f"noun_counts_seed_{seed}"].tolist()
+
+# frequency = []
+# for i in range(0, max(noun_counts) + 1):
+#     frequency.append(noun_counts.count(i))
 
 
-plt.title("Difficulty as measured by the number of nouns")
+
+# for i in range(0, max(noun_counts) + 1):
+#     plt.text(i, max(frequency) - frequency[i], frequency[i], ha='center', va='bottom', rotation=90)
+
+
+# Draw a vertical line for the 25th, 50th, and 75th percentiles. There is an offset of 0.5 so that it is easier to comprehend.
+plt.axvline(x=np.percentile(noun_counts, 25)+0.5, color='r', linestyle='--', label="25th percentile", linewidth=3)
+plt.axvline(x=np.percentile(noun_counts, 50)+0.5, color='black', linestyle='--', label="50th percentile", linewidth=3)
+plt.axvline(x=np.percentile(noun_counts, 75)+0.5, color='b', linestyle='--', label="75th percentile", linewidth=3)
+
+
+# Add legends for the vertical lines.
+plt.legend(fontsize=fontsize-5)
+
+
+# Add xticks to the histogram.
+plt.xticks(range(0, max(noun_counts) + 1, 1), fontsize=20)
+plt.yticks(fontsize=fontsize)
+
+plt.title("Difficulty as measured by the number of nouns", fontsize=fontsize)
 plt.tight_layout()
-plt.savefig("/home/rsaha/projects/babylm/difficulty_histogram_nouns_captions_only_bert_pos_tagger_cumulative.png")
+plt.savefig(f"/home/rsaha/projects/babylm/difficulty_histogram_nouns_captions_only_bert_pos_tagger_cumulative_seed_{seed}.png")

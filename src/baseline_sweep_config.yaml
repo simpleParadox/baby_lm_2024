@@ -10,9 +10,9 @@ parameters:
   batch_size:
     values: [32]
   n_epochs:
-    values: [10]
+    values: [8]
   min_save_every:
-    values: [5]
+    values: [1]
   n_workers:
     values: [10]
   optimizer:
@@ -26,7 +26,7 @@ parameters:
   do_curriculum:
     values: [False]  # This is False for standard-finetuning.
   model_name:
-    values: ['git']
+    values: ['flamingo']
   model_type:
     values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
   max_token_length:

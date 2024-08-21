@@ -27,7 +27,7 @@ import argparse  # This is necessary for wandb sweeps.
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=-1)
-parser.add_argument('--n_epochs', type=int, required=False, default=10)
+parser.add_argument('--n_epochs', type=int, required=False, default=8)
 parser.add_argument('--n_workers', type=int, required=False, default=10)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
@@ -229,7 +229,7 @@ if args.train_on_full_data:
 print("Loading dataset processor")
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
                                                           n_workers=n_workers, device=device,
-                                                          processor=baby_model.processor, manual_seed=seed, do_val=do_val)
+                                                          processor=baby_model.processor, manual_seed=seed, do_val=do_val, do_curriculum=args.do_curriculum)
 
 best_loss = np.inf
 last_saved = -1
@@ -247,6 +247,7 @@ else:
     if do_val:
         val_dataloader = multimodal_dataset_processor.val_dataloader
 
+
 # TODO: As of now, no early stopping is implemented. Implement it if needed.
 
 num_batches = multimodal_dataset_processor.get_num_batches_train()
@@ -258,14 +259,7 @@ if args.fp16:
     scaler = torch.cuda.amp.GradScaler(enabled=True)
 else:
     scaler = None
-# @torch.compile
-# def train_step(baby_model, preprocessed_images, optimizer, input_ids, attention_mask):
-#     model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-#     loss = model_outputs.loss
-#     loss.backward()
-#     optimizer.step()
-#     optimizer.zero_grad()
-#     return model_outputs
+
 
 # train_step = torch.compile(train_step)
 min_val_loss = np.inf
@@ -275,125 +269,194 @@ device_autocast = 'cuda' if torch.cuda.is_available() else 'cpu'
 train = True
 print(f"Train = {train}")
 print("Training")
-for epoch in epoch_iterator:
-    # Training.
-    running_loss = 0.0
-    average_running_loss = 0.0
-    batch_step = 0
-    batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
-    for preprocessed_images, captions in training_dataloader:
+if not args.do_curriculum:
+    print("Standard training.")
+    for epoch in epoch_iterator:
+        # Training.
+        running_loss = 0.0
+        average_running_loss = 0.0
+        batch_step = 0
+        batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
+        for preprocessed_images, captions in training_dataloader:
 
-        optimizer.zero_grad()
-        try:
-            tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
-        except:
-            print("Error in tokenizing captions: ", captions)
-            continue
-        input_ids = tokenized_captions['input_ids'].to(device)
-        attention_mask = tokenized_captions['attention_mask'].to(device)
+            optimizer.zero_grad()
+            try:
+                tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+            except:
+                print("Error in tokenizing captions: ", captions)
+                continue
+            input_ids = tokenized_captions['input_ids'].to(device)
+            attention_mask = tokenized_captions['attention_mask'].to(device)
 
-        preprocessed_images = preprocessed_images.to(device)
-        
-        if args.fp16:
-            with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-                loss = model_outputs.loss
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-            loss = model_outputs.loss
-            loss.backward()
-            optimizer.step()
-
-        running_loss += (loss.item() * input_ids.size(0))
-        average_running_loss += loss.item()
-
-        batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
-        batch_iterator.update(1)
-        global_step += 1
-
-        # Log the loss every 50 steps.
-        if batch_step % 100 == 0:
-            average_train_loss_per_batch = average_running_loss / (batch_step + 1)
-            wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
-        
-        batch_step += 1
-
-
-
-        
-    epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
-    wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
-    
-    best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
-    # Save the args_dict in the same directory as json.
-    if not os.path.exists(model_save_path):
-        os.makedirs(model_save_path)
-    with open(model_save_path + 'best_args.json', 'w') as f:
-        json.dump(best_args, f)
-        print("Args saved.")
-    
-    if args.train_on_full_data:
-        # Save the model every 5 epochs.
-        if (epoch+1) % min_save_every == 0:
-            epoch_path = model_save_path + f'epoch_{epoch+1}/'
-            if not os.path.exists(epoch_path):
-                os.makedirs(epoch_path)
-            baby_model.save_model(epoch_path)
-            print("Model saved at epoch: ", epoch)
-    
-    
-    if not args.train_on_full_data:
-        if epoch % 1 == 0:
-            num_batches_val = multimodal_dataset_processor.get_num_batches_val()
-            print("Num batches val: ", num_batches_val)
-            val_iterator = tqdm(total=num_batches_val, desc='Validation')
-            print("Validating")
-            # evaluate_model(model=baby_model, preprocessed_images=preprocessed_images, test_captions=captions)
-            baby_model.eval()
-            print("Eval mode")
-            eval_loss = 0.0
-            for preprocessed_images, captions in tqdm(val_dataloader):
-                try:
-                    tokenized_captions = baby_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
-                except:
-                    print("Error in tokenizing captions: ", captions)
-                    print("Continuing...")
-                    continue
-                input_ids = tokenized_captions['input_ids'].to(device)
-                attention_mask = tokenized_captions['attention_mask'].to(device)
-                preprocessed_images = preprocessed_images.to(device)
-
-                if args.fp16:
-                    with torch.autocast(device_type=device_autocast, dtype=torch.float16):
-                        model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
-                        loss = model_outputs.loss
-                else:
+            preprocessed_images = preprocessed_images.to(device)
+            
+            if args.fp16:
+                with torch.autocast(device_type=device_autocast, dtype=torch.float16):
                     model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
                     loss = model_outputs.loss
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                loss = model_outputs.loss
+                loss.backward()
+                optimizer.step()
 
-                eval_loss += (loss.item() * input_ids.size(0))
-                val_iterator.update(1)
-            current_val_loss = eval_loss / multimodal_dataset_processor.get_dataset_length('val')
-            wandb.log({'val_loss': current_val_loss})
-            if current_val_loss <= minimum_val_loss:
-                if not os.path.exists(model_save_path):
-                    os.makedirs(model_save_path)
-                baby_model.save_model(model_save_path)
-                print("Model saved.")
-                minimum_val_loss = current_val_loss
-                wandb.log({'min_val_loss': minimum_val_loss})
-                args_dict['min_val_loss'] = current_val_loss
-                # Save the args_dict in the same directory as json.
-                with open(model_save_path + 'args.json', 'w') as f:
-                    json.dump(args_dict, f)
-                    print("Args saved.")
-            print("Validation done.")
-            baby_model.train()
-            print("Train mode")
+            running_loss += (loss.item() * input_ids.size(0))
+            average_running_loss += loss.item()
 
+            batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
+            batch_iterator.update(1)
+            global_step += 1
+
+            # Log the loss every 50 steps.
+            if batch_step % 100 == 0:
+                average_train_loss_per_batch = average_running_loss / (batch_step + 1)
+                wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
+            
+            batch_step += 1
+
+            
+        epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
+        wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
+        
+        best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
+        # Save the args_dict in the same directory as json.
+        if not os.path.exists(model_save_path):
+            os.makedirs(model_save_path)
+        with open(model_save_path + 'best_args.json', 'w') as f:
+            json.dump(best_args, f)
+            print("Args saved.")
+        
+        if args.train_on_full_data:
+            # Save the model every 5 epochs.
+            if (epoch+1) % min_save_every == 0:
+                epoch_path = model_save_path + f'epoch_{epoch+1}/'
+                if not os.path.exists(epoch_path):
+                    os.makedirs(epoch_path)
+                baby_model.save_model(epoch_path)
+                print("Model saved at epoch: ", epoch)
+        
+        
+        if not args.train_on_full_data:
+            if epoch % 1 == 0:
+                num_batches_val = multimodal_dataset_processor.get_num_batches_val()
+                print("Num batches val: ", num_batches_val)
+                val_iterator = tqdm(total=num_batches_val, desc='Validation')
+                print("Validating")
+                # evaluate_model(model=baby_model, preprocessed_images=preprocessed_images, test_captions=captions)
+                baby_model.eval()
+                print("Eval mode")
+                eval_loss = 0.0
+                for preprocessed_images, captions in tqdm(val_dataloader):
+                    try:
+                        tokenized_captions = baby_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+                    except:
+                        print("Error in tokenizing captions: ", captions)
+                        print("Continuing...")
+                        continue
+                    input_ids = tokenized_captions['input_ids'].to(device)
+                    attention_mask = tokenized_captions['attention_mask'].to(device)
+                    preprocessed_images = preprocessed_images.to(device)
+
+                    if args.fp16:
+                        with torch.autocast(device_type=device_autocast, dtype=torch.float16):
+                            model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                            loss = model_outputs.loss
+                    else:
+                        model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                        loss = model_outputs.loss
+
+                    eval_loss += (loss.item() * input_ids.size(0))
+                    val_iterator.update(1)
+                current_val_loss = eval_loss / multimodal_dataset_processor.get_dataset_length('val')
+                wandb.log({'val_loss': current_val_loss})
+                if current_val_loss <= minimum_val_loss:
+                    if not os.path.exists(model_save_path):
+                        os.makedirs(model_save_path)
+                    baby_model.save_model(model_save_path)
+                    print("Model saved.")
+                    minimum_val_loss = current_val_loss
+                    wandb.log({'min_val_loss': minimum_val_loss})
+                    args_dict['min_val_loss'] = current_val_loss
+                    # Save the args_dict in the same directory as json.
+                    with open(model_save_path + 'args.json', 'w') as f:
+                        json.dump(args_dict, f)
+                        print("Args saved.")
+                print("Validation done.")
+                baby_model.train()
+                print("Train mode")
+
+else:
+    print("Doing curriculum learning.")
+    for epoch in epoch_iterator:
+        # Training.
+        running_loss = 0.0
+        average_running_loss = 0.0
+        batch_step = 0
+        batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
+        for preprocessed_images, captions in training_dataloader:
+
+            # TODO: Do some checks here with regards to doing curriculum learning, such as if it is the first epoch, then only include samples of difficulty level 1 and 2.            
+
+            optimizer.zero_grad()
+            try:
+                tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+            except:
+                print("Error in tokenizing captions: ", captions)
+                continue
+            input_ids = tokenized_captions['input_ids'].to(device)
+            attention_mask = tokenized_captions['attention_mask'].to(device)
+
+            preprocessed_images = preprocessed_images.to(device)
+            
+            if args.fp16:
+                with torch.autocast(device_type=device_autocast, dtype=torch.float16):
+                    model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                    loss = model_outputs.loss
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                loss = model_outputs.loss
+                loss.backward()
+                optimizer.step()
+
+            running_loss += (loss.item() * input_ids.size(0))
+            average_running_loss += loss.item()
+
+            batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
+            batch_iterator.update(1)
+            global_step += 1
+
+            # Log the loss every 50 steps.
+            if batch_step % 100 == 0:
+                average_train_loss_per_batch = average_running_loss / (batch_step + 1)
+                wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
+            
+            batch_step += 1
+            
+        epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
+        wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
+        
+        best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
+        # Save the args_dict in the same directory as json.
+        if not os.path.exists(model_save_path):
+            os.makedirs(model_save_path)
+        with open(model_save_path + 'best_args.json', 'w') as f:
+            json.dump(best_args, f)
+            print("Args saved.")
+        
+        if args.train_on_full_data:
+            # Save the model every 5 epochs.
+            if (epoch+1) % min_save_every == 0:
+                epoch_path = model_save_path + f'epoch_{epoch+1}/'
+                if not os.path.exists(epoch_path):
+                    os.makedirs(epoch_path)
+                baby_model.save_model(epoch_path)
+                print("Model saved at epoch: ", epoch)
 
 if args.train_on_full_data:
     model_save_path = model_save_path + 'final_model/'
@@ -401,3 +464,5 @@ if args.train_on_full_data:
         os.makedirs(model_save_path)
     baby_model.save_model(model_save_path)
     print("Model saved.")
+    # Save the optimizer.
+    torch.save(optimizer.state_dict(), f"{model_save_path}optimizer_after_training_{n_epochs}_epochs.pth")
