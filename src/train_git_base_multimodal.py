@@ -33,7 +33,7 @@ parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=42)
 parser.add_argument('--lr', type=float, required=False, default=1e-5)
 parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
-parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard fine-tuning.
+parser.add_argument('--do_curriculum', type=str, default=True)  # If this is False, then do standard fine-tuning.
 parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
 parser.add_argument('--model_name', type=str, default='git')
 parser.add_argument('--use_accelerate', type=str, default=False)  # Whether to use accelerate or not.
@@ -238,20 +238,25 @@ last_saved = -1
 # full_dataset_length = len(multimodal_dataset_processor.train_dataloader)
 
 # Use the prepare method from accelerator to prepare the pytorch objects.
-if args.use_accelerate:
-    baby_model, optimizer, training_dataloader = accelerator.prepare(
-        baby_model, optimizer, multimodal_dataset_processor.train_dataloader
-    )
+if not args.do_curriculum:
+    if args.use_accelerate:
+        baby_model, optimizer, training_dataloader = accelerator.prepare(
+            baby_model, optimizer, multimodal_dataset_processor.train_dataloader
+        )
+    else:
+        training_dataloader = multimodal_dataset_processor.train_dataloader
+        if do_val:
+            val_dataloader = multimodal_dataset_processor.val_dataloader
 else:
-    training_dataloader = multimodal_dataset_processor.train_dataloader
-    if do_val:
-        val_dataloader = multimodal_dataset_processor.val_dataloader
+    # Only for training.
+    curriculum_dataloaders = multimodal_dataset_processor.curriculum_dataloaders  # This is a list.
 
-
-# TODO: As of now, no early stopping is implemented. Implement it if needed.
-
-num_batches = multimodal_dataset_processor.get_num_batches_train()
-print("num_batches train: ", num_batches)
+if not args.do_curriculum:
+    num_batches = multimodal_dataset_processor.get_num_batches_train()
+    print("num_batches train: ", num_batches)
+else:
+    curriculum_num_batches = multimodal_dataset_processor.get_num_batches_train()
+    print("curriculum_num_batches: ", curriculum_num_batches)
 running_loss = 0
 
 if args.fp16:
@@ -391,14 +396,26 @@ if not args.do_curriculum:
 else:
     print("Doing curriculum learning.")
     for epoch in epoch_iterator:
-        # Training.
+        # Training. The idea is that based on the epoch number, decide on the data loader to iterate over.
         running_loss = 0.0
         average_running_loss = 0.0
         batch_step = 0
-        batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
-        for preprocessed_images, captions in training_dataloader:
 
-            # TODO: Do some checks here with regards to doing curriculum learning, such as if it is the first epoch, then only include samples of difficulty level 1 and 2.            
+        # Select the correct dataloader based on the epoch.
+        if epoch < 2:
+            training_dataloader = curriculum_dataloaders[0]
+            batch_iterator = tqdm(total=curriculum_num_batches[0], disable=False, desc=f'epoch: {epoch}')
+        elif epoch >= 2 and epoch < 4:
+            training_dataloader = curriculum_dataloaders[1]
+            batch_iterator = tqdm(total=curriculum_num_batches[1], disable=False, desc=f'epoch: {epoch}')
+        elif epoch >= 4 and epoch < 6:
+            training_dataloader = curriculum_dataloaders[2]
+            batch_iterator = tqdm(total=curriculum_num_batches[2], disable=False, desc=f'epoch: {epoch}')
+        else:
+            training_dataloader = curriculum_dataloaders[3]
+            batch_iterator = tqdm(total=curriculum_num_batches[3], disable=False, desc=f'epoch: {epoch}')
+
+        for preprocessed_images, captions in training_dataloader:
 
             optimizer.zero_grad()
             try:

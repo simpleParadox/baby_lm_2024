@@ -28,6 +28,12 @@ TSV_URLS = {
     # 'train': 'https://storage.cloud.google.com/gcc-data/Train/GCC-training.tsv?_ga=2.191230122.-1896153081.1529438250'
 }
 
+CURRICULUM_TSV_URLS = {
+    'train': [
+        'src/datasets/multimodal_train/curriculum_tsvs/'
+    ]
+}
+
 FORBIDDEN_URLS = [
     'sciencephoto'
 ]
@@ -80,6 +86,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.n_workers = n_workers
         self.val_n_workers = 28
         self.manual_seed = manual_seed
+        self.do_curriculum = do_curriculum
 
         # Create ranges for train / val / test splits.
         self.full_range = np.arange(0, 3043190)  # 2851072 is the number of samples in the all_multimodal.tsv file.
@@ -128,7 +135,13 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         if not do_curriculum:
             self.load_train_dataset()
         else:
-            self.load_curriculum_dataset()
+            # These are hardcoded so have to be changed if the dataset changes.
+            self.train_q1_n_samples = np.arange(0, 886849)
+            self.train_q2_n_samples = np.arange(0, 1591561)
+            self.train_q3_n_samples = np.arange(0, 2286283)
+            self.train_q4_n_samples = np.arange(0, 3043190)
+
+            self.load_curriculum_datasets()  # This will load multiple dataloaders based on the predefined split.
         if do_val:
             self.load_val_dataset()
         
@@ -177,9 +190,17 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
 
     def get_num_batches_train(self) -> int:
+        if not self.do_curriculum:
+            return len(self.train_indices) // self.batch_size  # Changed to the number of samples in the all_multimodal.tsv file.
+        else:
+            # No need to divide by batch size, because the dataloader will take care of that.
+            quartile_1_batches = len(self.train_q1_n_samples) // self.batch_size
+            quartile_2_batches = len(self.train_q2_n_samples) // self.batch_size
+            quartile_3_batches = len(self.train_q3_n_samples) // self.batch_size
+            quartile_4_batches = len(self.train_q4_n_samples) // self.batch_size
 
-        return len(self.train_indices) // self.batch_size  # Changed to the number of samples in the all_multimodal.tsv file.
-        # return len(self.train_dataloader)
+            return [quartile_1_batches, quartile_2_batches, quartile_3_batches, quartile_4_batches]
+
     
     def get_num_batches_test(self) -> int:
         return None  # Currently unimplemented.
@@ -194,12 +215,44 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         random.seed(worker_seed)
 
 
-    def load_curriculum_dataset(self):
-        raise NotImplementedError
+    def load_curriculum_datasets(self):
+        """
+        Load multiple datasets for each epoch.
+        The first dataset will contain samples of difficulty level in the first quartile.
+        the second dataset will contain samples of difficulty level second quartile,
+        the third dataset will contain samples of difficulty level third quartile,
+        the fourth dataset will contain all the samples.
+        """
+
+        self.curriculum_dataloaders = []
+        seed = self.manual_seed
+        # Load the datasets for that seed.
+        train_datapipe_quartile_1 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256, 
+                                                                        dataset_size=self.dataset_size,
+                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs/quartile_1_seed_{seed}.tsv")
+        train_datapipe_quartile_2 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
+                                                                        dataset_size=self.dataset_size,
+                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs/quartile_2_seed_{seed}.tsv")
+        train_datapipe_quartile_3 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
+                                                                        dataset_size=self.dataset_size,
+                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs/quartile_3_seed_{seed}.tsv")
+        
+        # The fourth quartile dataset contains all the rows.
+        train_datapipe_quartile_4 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
+                                                                            dataset_size=self.dataset_size,
+                                                                            tsv_url=f"src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv")
+        batch_size = self.batch_size
+
+        # Now for each datapipe, create a dataloader.
+        self.curriculum_dataloaders.append(DataLoader(train_datapipe_quartile_1, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True))
+        self.curriculum_dataloaders.append(DataLoader(train_datapipe_quartile_2, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True))
+        self.curriculum_dataloaders.append(DataLoader(train_datapipe_quartile_3, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True))
+        self.curriculum_dataloaders.append(DataLoader(train_datapipe_quartile_4, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True))
+
         
     def load_train_dataset(self):
 
-        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices)
+        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, )
 
         batch_size = self.batch_size
         self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True)
@@ -281,6 +334,8 @@ def package_images_captions(batch):
         if image is not None:
             yield image, caption
 
+def filter_rows_curriculum(rows):
+    return [row for row in rows if row[0] != '']
 
 
 def filter_rows(rows, indices):
@@ -294,7 +349,7 @@ def filter_rows(rows, indices):
     # return [element for i, element in enumerate(row) if i in indices]
 
 def _datapipe_from_tsv_url(
-    tsv_url: str, buffer_size: int = 256, dataset_size=-1, indices=None, split='train'
+    tsv_url: str, buffer_size: int = 256, dataset_size=-1, indices=None, split='train', do_curriculum=False
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
 
     datapipe =  dp.iter.FileOpener([tsv_url], mode='r').readlines(return_path=False)
@@ -330,8 +385,10 @@ def _datapipe_from_tsv_url(
 
     datapipe: dp = datapipe.sharding_filter().map(lambda line: line.split("\t")).batch(buffer_size)
 
-
-    datapipe = (datapipe.map(lambda elements: filter_rows(elements, indices)))
+    if not do_curriculum:
+        datapipe = (datapipe.map(lambda elements: filter_rows(elements, indices)))
+    else:
+        datapipe = datapipe.map(lambda elements: filter_rows_curriculum(elements))
 
     
 
@@ -341,6 +398,12 @@ def _datapipe_from_tsv_url(
 
     return ParallelSampleLoader(datapipe)
     # return datapipe
+
+
+def multimodal_dataset_pipe_curriculum(
+    split: str = "train", buffer_size: int = 8, dataset_size=-1, indices=None, tsv_url=None
+) -> IterDataPipe[Tuple[Image.Image, str]]:
+    return _datapipe_from_tsv_url(tsv_url=tsv_url, buffer_size=buffer_size, dataset_size=dataset_size, indices=indices, split=split, do_curriculum=True)
 
 def multimodal_dataset_pipe(
     split: str = "train", buffer_size: int = 8, dataset_size=-1, indices=None
