@@ -95,7 +95,7 @@ class BabyFlamingoModel(nn.Module):
             assert text_init_model_path is not None, "Please provide a text_init_model_path."
             if baseline_causal_lm and not baseline_sequence_classification:
                 self.model_type = "causal_lm"
-                self.model = FlamingoForCausalLM.from_pretrained(text_init_model_path, local_files_only=True)
+                self.model = FlamingoForCausalLM.from_pretrained(text_init_model_path+'/final_model/', local_files_only=True)
                 
             elif not baseline_causal_lm and baseline_sequence_classification:
                 self.model_type = "sequence"
@@ -194,10 +194,10 @@ class BabyGitModel(nn.Module):
             assert text_init_model_path is not None, "Please provide a text_init_model_path."
             if baseline_causal_lm and not baseline_sequence_classification:
                 self.model_type = "causal_lm"
-                self.model = GitForCausalLM.from_pretrained(text_init_model_path, local_files_only=True)
+                self.model = GitForCausalLM.from_pretrained(text_init_model_path + '/final_model/', local_files_only=True)
             elif not baseline_causal_lm and baseline_sequence_classification:
                 self.model_type = "sequence"
-                self.model = GitForSequenceClassification.from_pretrained(text_init_model_path, local_files_only=True)
+                self.model = GitForSequenceClassification.from_pretrained(text_init_model_path, local_files_only=True, use_pretrained_encoder=False) # setting this to False will load the pre-trained weights from the causal_lm model.
             else:
                 raise ValueError("Please specify either baseline_git_causal_lm or baseline_git_sequence_classification as True (but not both)")
         

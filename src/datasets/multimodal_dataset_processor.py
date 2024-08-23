@@ -166,6 +166,8 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
             # imgs_1 = tuple(self.image_preprocessor(images=img.convert('RGBA'), return_tensors='pt') for img in imgs)
             # imgs_2 = tuple(self.image_preprocessor(images=img, return_tensors='pt').pixel_values for img in imgs)
+            # Convert to 'RGBA' mode before passing to the image preprocessor.
+            imgs = [img.convert('RGBA') for img in imgs]
             imgs_2 = self.image_preprocessor(images=imgs, return_tensors='pt').pixel_values
             # imgs = tuple(self.image_preprocessor(images=img, return_tensors='pt') for img in imgs)
 

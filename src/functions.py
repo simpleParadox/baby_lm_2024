@@ -48,11 +48,11 @@ def find_best_model_path(top_level_path):
     import numpy as np
     
     min_loss = np.inf
-    for folder in glob.glob(top_level_path + '/*'):
-        for file in glob.glob(folder + '/best_params.json'):
+    for folder in glob.glob(top_level_path + '/*/final_model'):
+        for file in glob.glob(folder + '/best_args.json'):
             with open(file, 'r') as f:
                 data = json.load(f)
-                current_loss = data['min_loss']
+                current_loss = data['epoch_loss']
                 
                 # If the current loss is less than the min_loss, then update the min_loss and the best_model_path.
                 if current_loss < min_loss:

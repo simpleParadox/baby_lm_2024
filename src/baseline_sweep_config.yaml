@@ -23,8 +23,6 @@ parameters:
     values: [-1]
   seed:
     values: [0, 1, 2]
-  do_curriculum:
-    values: [False]  # This is False for standard-finetuning.
   model_name:
     values: ['flamingo']
   model_type:
