@@ -48,7 +48,7 @@ def find_best_model_path(top_level_path):
     import numpy as np
     
     min_loss = np.inf
-    for folder in glob.glob(top_level_path + '/*/final_model'):
+    for folder in glob.glob(top_level_path + '/*'):
         for file in glob.glob(folder + '/best_args.json'):
             with open(file, 'r') as f:
                 data = json.load(f)
