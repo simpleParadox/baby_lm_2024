@@ -229,14 +229,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns   
 import numpy as np
-df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts.tsv", sep="\t")
+from tqdm import tqdm
+df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_replaced.tsv", sep="\t")
+
 
 seed = 2
 fontsize = 30
 plt.clf()
 fig, ax = plt.subplots(figsize=(15, 10))
 # plt.hist(noun_counts, bins=20)
-sns.histplot(ax=ax, data=df, x=f"noun_counts_seed_{seed}", discrete=True, cumulative=True)
+sns.histplot(ax=ax, data=df, x=f"noun_counts_seed_{seed}_replaced", discrete=True, cumulative=True)
 plt.xlabel("Difficulty: Number of Nouns", fontsize=fontsize)
 plt.ylabel("Frequency", fontsize=fontsize)
 
@@ -255,19 +257,19 @@ noun_counts = df[f"noun_counts_seed_{seed}"].tolist()
 
 
 # Draw a vertical line for the 25th, 50th, and 75th percentiles. There is an offset of 0.5 so that it is easier to comprehend.
-plt.axvline(x=np.percentile(noun_counts, 25)+0.5, color='r', linestyle='--', label="25th percentile", linewidth=3)
-plt.axvline(x=np.percentile(noun_counts, 50)+0.5, color='black', linestyle='--', label="50th percentile", linewidth=3)
-plt.axvline(x=np.percentile(noun_counts, 75)+0.5, color='b', linestyle='--', label="75th percentile", linewidth=3)
+plt.axvline(x=np.percentile(noun_counts, 25)+0.5, color='r', linestyle='--', label="Q1", linewidth=3)
+plt.axvline(x=np.percentile(noun_counts, 50)+0.5, color='black', linestyle='--', label="Q3", linewidth=3)
+plt.axvline(x=np.percentile(noun_counts, 75)+0.5, color='b', linestyle='--', label="Q3", linewidth=3)
 
 
 # Add legends for the vertical lines.
 plt.legend(fontsize=fontsize-5)
 
-
+plt.ticklabel_format(style='sci', axis='y', useOffset=False)
 # Add xticks to the histogram.
 plt.xticks(range(0, max(noun_counts) + 1, 1), fontsize=20)
 plt.yticks(fontsize=fontsize)
 
 plt.title("Difficulty as measured by the number of nouns", fontsize=fontsize)
 plt.tight_layout()
-plt.savefig(f"/home/rsaha/projects/babylm/difficulty_histogram_nouns_captions_only_bert_pos_tagger_cumulative_seed_{seed}.png")
+plt.savefig(f"/home/rsaha/projects/babylm/difficulty_histogram_nouns_captions_only_bert_pos_tagger_cumulative_seed_{seed}_replaced.png")
