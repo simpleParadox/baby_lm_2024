@@ -231,13 +231,13 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         # Load the datasets for that seed.
         train_datapipe_quartile_1 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256, 
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_1_seed_{seed}_replaced.tsv")
+                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_1_seed_{seed}_assigned_max_replaced.tsv")
         train_datapipe_quartile_2 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_2_seed_{seed}_replaced.tsv")
+                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_2_seed_{seed}_assigned_max_replaced.tsv")
         train_datapipe_quartile_3 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_3_seed_{seed}_replaced.tsv")
+                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_3_seed_{seed}_assigned_max_replaced.tsv")
         
         # The fourth quartile dataset contains all the rows.
         train_datapipe_quartile_4 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,

@@ -6,7 +6,7 @@ This script will create the quartiled datasets for the curriculum learning train
 import pandas as pd
 from tqdm import tqdm
 
-df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_replaced.tsv", sep="\t")
+df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced.tsv", sep="\t")
 
 # Now for each seed, create a separate dataset for each quartile.
 
@@ -20,7 +20,7 @@ for seed in tqdm(range(0, 3)):
     df_quartile_3 = df[df[f'noun_counts_seed_{seed}_replaced'] < predefined_quartiles_difficulty_values[2]]
     # No need to create the fourth quartile, because it will contain all the rows, which is df itself.
     # Now save the dataframes to tsv files.
-    df_quartile_1.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_1_seed_{seed}_replaced.tsv", sep="\t", index=False)
-    df_quartile_2.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_2_seed_{seed}_replaced.tsv", sep="\t", index=False)
-    df_quartile_3.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_3_seed_{seed}_replaced.tsv", sep="\t", index=False)
+    df_quartile_1.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_1_seed_{seed}_assigned_max_replaced.tsv", sep="\t", index=False)
+    df_quartile_2.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_2_seed_{seed}_assigned_max_replaced.tsv", sep="\t", index=False)
+    df_quartile_3.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_3_seed_{seed}_assigned_max_replaced.tsv", sep="\t", index=False)
     
