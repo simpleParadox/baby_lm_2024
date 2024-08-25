@@ -28,13 +28,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
 parser.add_argument('--dataset_size', type=int, required=False, default=100)
 parser.add_argument('--n_epochs', type=int, required=False, default=8)
-parser.add_argument('--n_workers', type=int, required=False, default=10)
+parser.add_argument('--n_workers', type=int, required=False, default=5)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=0)
 parser.add_argument('--lr', type=float, required=False, default=1e-5)
 parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
 parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard fine-tuning.
-parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='causal_lm')
+parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='sequence')
 parser.add_argument('--model_name', type=str, default='flamingo')
 parser.add_argument('--use_accelerate', type=str, default=False)  # Whether to use accelerate or not.
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
@@ -156,7 +156,7 @@ if args.train_on_full_data:
 # NOTE: best_text_init_root_path must be assigned first. The ordering is important.
 
 if args.initialize_with_text:
-    best_text_init_root_path = model_save_path + f'text_only/standard/{args.model_type}/seed_{seed}/'
+    best_text_init_root_path = model_save_path + f'text_only/standard/causal_lm/seed_{seed}/' # NOTE: For both CausalLM and Sequence classification, it must be causal_lm because for seq class you're loading the causal_lm model.
     model_save_path += 'initialize_with_text/'
     args.text_init_model_path = find_best_model_path(best_text_init_root_path)
 
@@ -312,7 +312,7 @@ if not args.do_curriculum:
                 optimizer.step()
 
             running_loss += (loss.item() * input_ids.size(0))
-            average_running_loss += loss.item()
+            average_running_loss += loss.item()  # This is already divided by the batch size.
 
             batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
             batch_iterator.update(1)
@@ -320,7 +320,7 @@ if not args.do_curriculum:
 
             # Log the loss every 50 steps.
             if batch_step % 100 == 0:
-                average_train_loss_per_batch = average_running_loss / (batch_step + 1)
+                average_train_loss_per_batch = average_running_loss / (batch_step + 1)  # This is correct - if in doubt, think about it. It's the average batch loss.
                 wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
             
             batch_step += 1

@@ -14,7 +14,7 @@ parameters:
   min_save_every:
     values: [1]
   n_workers:
-    values: [10]
+    values: [5]
   optimizer:
     values: ["adam"]
   do_curriculum:
