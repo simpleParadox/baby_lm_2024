@@ -230,21 +230,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns   
 import numpy as np
 from tqdm import tqdm
-df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_replaced.tsv", sep="\t")
+seed = 0
+df = pd.read_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_{seed}.tsv", sep="\t")
 
 
-seed = 2
 fontsize = 30
 plt.clf()
 fig, ax = plt.subplots(figsize=(15, 10))
-# plt.hist(noun_counts, bins=20)
+# plt.hist(noun_counts, bins=22)
 sns.histplot(ax=ax, data=df, x=f"noun_counts_seed_{seed}_replaced", discrete=True, cumulative=True)
 plt.xlabel("Difficulty: Number of Nouns", fontsize=fontsize)
 plt.ylabel("Frequency", fontsize=fontsize)
 
 # Now add the count above each bar in the histogram.
 # Create a list to store the frequency of each bin.
-noun_counts = df[f"noun_counts_seed_{seed}"].tolist()
+noun_counts = df[f"noun_counts_seed_{seed}_replaced"].tolist()
 
 # frequency = []
 # for i in range(0, max(noun_counts) + 1):
@@ -265,11 +265,12 @@ plt.axvline(x=np.percentile(noun_counts, 75)+0.5, color='b', linestyle='--', lab
 # Add legends for the vertical lines.
 plt.legend(fontsize=fontsize-5)
 
-plt.ticklabel_format(style='sci', axis='y', useOffset=False)
+ax.ticklabel_format(style='sci', axis='y', useOffset=False)
+ax.yaxis.get_offset_text().set_fontsize(fontsize-5)
 # Add xticks to the histogram.
 plt.xticks(range(0, max(noun_counts) + 1, 1), fontsize=20)
 plt.yticks(fontsize=fontsize)
 
 plt.title("Difficulty as measured by the number of nouns", fontsize=fontsize)
 plt.tight_layout()
-plt.savefig(f"/home/rsaha/projects/babylm/difficulty_histogram_nouns_captions_only_bert_pos_tagger_cumulative_seed_{seed}_replaced.png")
+plt.savefig(f"/home/rsaha/projects/babylm/difficulty_histogram_nouns_captions_only_bert_pos_tagger_cumulative_assigned_max_replaced_train_seed_{seed}.png")

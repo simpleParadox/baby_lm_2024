@@ -21,17 +21,15 @@ import asyncio
 from torch import Tensor
 
 TSV_URLS = {
-    'train': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv',
-    'val': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv',
-    'test': 'src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed.tsv'
+    'train': 'src/datasets/multimodal_train/',
+    'val': 'src/datasets/multimodal_train/',
     # 'val': 'src/datasets/Train-GCC-training.tsv'
     # 'train': 'https://storage.cloud.google.com/gcc-data/Train/GCC-training.tsv?_ga=2.191230122.-1896153081.1529438250'
 }
 
 CURRICULUM_TSV_URLS = {
-    'train': [
-        'src/datasets/multimodal_train/curriculum_tsvs_replaced/'
-    ]
+    'train': 
+        'src/datasets/multimodal_train/curriculum_tsvs_95_train_replaced/'
 }
 
 FORBIDDEN_URLS = [
@@ -87,42 +85,43 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.val_n_workers = 28
         self.manual_seed = manual_seed
         self.do_curriculum = do_curriculum
-
+        self.train_indices = None
+        self.val_indices = None
         # Create ranges for train / val / test splits.
-        self.full_range = np.arange(0, 3043190)  # 2851072 is the number of samples in the all_multimodal.tsv file.
-        if dataset_size > 0:
-            self.full_range = np.arange(0, dataset_size)
+        self.full_range = np.arange(0, 2891030)  # 2851072 is the number of samples in the all_multimodal.tsv file.
+        # if dataset_size > 0:
+        #     self.full_range = np.arange(0, dataset_size)
 
-        if do_val:
-            # Set the split ratios
-            train_ratio = 0.9
+        # if do_val:
+        #     # Set the split ratios
+        #     train_ratio = 0.9
 
-            # Calculate the split indices
-            num_samples = len(self.full_range)
-            train_end = int(train_ratio * num_samples)
+        #     # Calculate the split indices
+        #     num_samples = len(self.full_range)
+        #     train_end = int(train_ratio * num_samples)
 
-            # Shuffle the indices to ensure randomness
-            np.random.seed(manual_seed)
-            np.random.shuffle(self.full_range)
+        #     # Shuffle the indices to ensure randomness
+        #     np.random.seed(manual_seed)
+        #     np.random.shuffle(self.full_range)
 
-            # Split the indices into train, val, and test sets
-            self.train_indices = self.full_range[:train_end]
-            self.val_indices = self.full_range[train_end:]
+        #     # Split the indices into train, val, and test sets
+        #     self.train_indices = self.full_range[:train_end]
+        #     self.val_indices = self.full_range[train_end:]
 
-            # Convert the indices to lists (optional, as they are already arrays)
-            self.train_indices = self.train_indices.tolist()
-            self.val_indices = self.val_indices.tolist()
+        #     # Convert the indices to lists (optional, as they are already arrays)
+        #     self.train_indices = self.train_indices.tolist()
+        #     self.val_indices = self.val_indices.tolist()
 
-            # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
-            indices_train_set = set(self.train_indices)
-            indices_val_set = set(self.val_indices)
+        #     # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
+        #     indices_train_set = set(self.train_indices)
+        #     indices_val_set = set(self.val_indices)
 
-            assert len(indices_train_set.intersection(indices_val_set)) == 0
-            print("No overlap between the indices of the train and val sets.")
-        else:
-            self.train_indices = self.full_range[:]
-            self.val_indices = []
-            self.val_dataset = None
+        #     assert len(indices_train_set.intersection(indices_val_set)) == 0
+        #     print("No overlap between the indices of the train and val sets.")
+        # else:
+        #     self.train_indices = self.full_range[:]
+        #     self.val_indices = []
+        #     self.val_dataset = None
 
 
         self.device = device
@@ -133,17 +132,21 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
         # always need to first load train then load val dataset. Fix this confusing requirement later
         if not do_curriculum:
+            self.train_standard_n_samples = np.arange(0, 2891030)
             self.load_train_dataset()
         else:
             # These are hardcoded so have to be changed if the dataset changes.
-            self.train_q1_n_samples = np.arange(0, 886849)
-            self.train_q2_n_samples = np.arange(0, 1591561)
-            self.train_q3_n_samples = np.arange(0, 2286283)
-            self.train_q4_n_samples = np.arange(0, 3043190)
+            # These values are updated for the train split.
+            self.train_q1_n_samples = np.arange(0, 841907)
+            self.train_q2_n_samples = np.arange(0, 1510443)
+            self.train_q3_n_samples = np.arange(0, 2283866)
+            self.train_q4_n_samples = np.arange(0, 2891030)
 
             self.load_curriculum_datasets()  # This will load multiple dataloaders based on the predefined split.
         if do_val:
+            print("Doing validation")
             self.load_val_dataset()
+            self.val_standard_n_samples = np.arange(0, 152160)
         
     def collate_fn(self, batch) -> tuple[Tensor, list[str]]:
         '''
@@ -158,26 +161,115 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         og_captions: list
 
         imgs, og_captions = zip(*batch)
-
-        # return imgs, og_captions
-
+        
+        
+        """
+        The following block was the one before I made all the changes. This is a slight modification of the list comprehension.
+        """
+        
+        # imgs_2 = tuple(self.image_preprocessor(img.convert("RGBA"), return_tensors='pt').pixel_values for img in imgs)
+        
+        captions = []
+        imgs_converted = []
+        
+        for img, cap in zip(imgs, og_captions):
+            try:
+                img = img.convert('RGBA')
+                # The following lines execute only if the above line doesn't throw an exception.
+                imgs_converted.append(img)
+                captions.append(cap)
+            except Exception as e:
+                print("Cannot convert image to RGBA. Trying conversion to RGB.", e)
+                try:
+                    img = img.convert('RGB')
+                    imgs_converted.append(img)
+                    captions.append(cap)
+                except Exception as e:
+                    print("Cannot convert image to RGBA or  RGB. Skipping this image.", e)
+        
+        # Now convert the images to tensors.                    
         try:
-
-
-            # imgs_1 = tuple(self.image_preprocessor(images=img.convert('RGBA'), return_tensors='pt') for img in imgs)
-            # imgs_2 = tuple(self.image_preprocessor(images=img, return_tensors='pt').pixel_values for img in imgs)
-            # Convert to 'RGBA' mode before passing to the image preprocessor.
-            imgs = [img.convert('RGBA') for img in imgs]
-            imgs_2 = self.image_preprocessor(images=imgs, return_tensors='pt').pixel_values
-            # imgs = tuple(self.image_preprocessor(images=img, return_tensors='pt') for img in imgs)
-
+            imgs_2 = self.image_preprocessor(images=imgs_converted, return_tensors='pt').pixel_values
         except Exception as e:
+            print("Cannot process one or more images.")
+            print("Figuring out which of the images is causing the problem.")
+            good_images = []
+            good_captions = []
+            for img_index, (img, caption) in enumerate(zip(imgs_converted, captions)):
+                try:
+                    temp = self.image_preprocessor(images=img, return_tensors='pt').pixel_values
+                    good_images.append(img)
+                    good_captions.append(caption)
+                except Exception as e:
+                    print("Cannot process image at index: ", img_index)
+            
+            imgs_2 = self.image_preprocessor(images=good_images, return_tensors='pt').pixel_values
+            captions = good_captions  # Newly assign captions.
+            # Now remove the faulty images from the list and the captions
 
-            print('Exception in collate_fn: ', e)
+        
+        # NOTE: The following is the old code.
+        # try:
 
-            return (None, None)
 
-        captions = og_captions
+        #     # imgs_1 = tuple(self.image_preprocessor(images=img.convert('RGBA'), return_tensors='pt') for img in imgs)
+        #     # imgs_2 = tuple(self.image_preprocessor(images=img, return_tensors='pt').pixel_values for img in imgs)
+        #     # Convert to 'RGBA' mode before passing to the image preprocessor.
+        #     imgs = [img.convert('RGBA') for img in imgs]
+        #     imgs_2 = self.image_preprocessor(images=imgs, return_tensors='pt').pixel_values
+        #     # imgs = tuple(self.image_preprocessor(images=img, return_tensors='pt') for img in imgs)
+
+        # except Exception as e:
+
+        #     print('Exception in collate_fn: ', e)
+
+        #     return (None, None)
+
+        # captions = og_captions
+        # preprocessed_images = imgs_2 # torch.stack(imgs_2)
+
+        
+        
+        # flag = 0
+        # imgs_results = []
+        # for img in imgs:
+        #     try:
+        #         img = img.convert('RGBA')
+        #     except Exception as e:
+        #         print("Exception in image conversion. Cannot convert to RGBA.", e)
+        #         print("Trying conversion to RGB.")
+        #         try:
+        #             img = img.convert('RGB')
+        #             print("Conversion to RGB successful")
+        #         except Exception as e:
+        #             print("Exception in image conversion. Cannot convert to RGB.", e)
+        #             import pdb
+        #             pdb.set_trace()
+        #             print("Cannot convert image to RGB. Skipping this image.")
+        #             flag = 1
+        #             continue
+        #     imgs_results.append(img)
+        # flag = 0
+        # try:
+
+        #     imgs_2 = self.image_preprocessor(images=imgs_results, return_tensors='pt').pixel_values
+        # except Exception as ex:
+        #     # print('Exception in image_processing: ', ex)
+        #     # Print the images, and also the shape of each image in the batch.
+        #     print("Batch size: ", len(imgs_results))
+        #     print("Imgs results: ", imgs_results)
+            
+        #     for img in imgs_results:
+        #         print("Image shape: ", img.size)
+
+        #     import pdb
+        #     pdb.set_trace()
+        #     print('Exception in image_processing: ', ex)
+        #     flag = 1
+        
+        # if flag == 1:    
+        #     return (None, None)
+    
         preprocessed_images = imgs_2 # torch.stack(imgs_2)
 
         outputs1 = preprocessed_images
@@ -192,10 +284,14 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
 
     def get_num_batches_train(self) -> int:
+        # NOTE: It must be noted tha even if this function returns the total number of possible batches,
+        # there are cases, where some samples are just failed to be processed. In that case, the number of samples
+        # in a batch will be less than the declared batch size.
+        # Regardless, in the train_git_base_multimodal.py file, this is accounted for, and I actually count the
+        # number of batches, so that the correct value is used to calculate the epoch loss.
         if not self.do_curriculum:
-            return len(self.train_indices) // self.batch_size  # Changed to the number of samples in the all_multimodal.tsv file.
+            return len(self.train_standard_n_samples) // self.batch_size  # Changed to the number of samples in the all_multimodal.tsv file.
         else:
-            # No need to divide by batch size, because the dataloader will take care of that.
             quartile_1_batches = len(self.train_q1_n_samples) // self.batch_size
             quartile_2_batches = len(self.train_q2_n_samples) // self.batch_size
             quartile_3_batches = len(self.train_q3_n_samples) // self.batch_size
@@ -203,12 +299,12 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
             return [quartile_1_batches, quartile_2_batches, quartile_3_batches, quartile_4_batches]
 
+    def get_num_batches_val(self) -> int:
+        return len(self.val_standard_n_samples) // self.val_batch_size
     
     def get_num_batches_test(self) -> int:
-        return None  # Currently unimplemented.
+        raise NotImplementedError  # Currently unimplemented.
     
-    def get_num_batches_val(self) -> int:
-        return len(self.val_indices) // self.val_batch_size
     
     @staticmethod
     def seed_dataloader_worker(worker_id):
@@ -231,18 +327,18 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         # Load the datasets for that seed.
         train_datapipe_quartile_1 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256, 
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_1_seed_{seed}_assigned_max_replaced.tsv")
+                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_1_seed_{seed}_assigned_max_replaced_train.tsv")
         train_datapipe_quartile_2 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_2_seed_{seed}_assigned_max_replaced.tsv")
+                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_2_seed_{seed}_assigned_max_replaced_train.tsv")
         train_datapipe_quartile_3 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"src/datasets/multimodal_train/curriculum_tsvs_replaced/quartile_3_seed_{seed}_assigned_max_replaced.tsv")
+                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_3_seed_{seed}_assigned_max_replaced_train.tsv")
         
         # The fourth quartile dataset contains all the rows.
         train_datapipe_quartile_4 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                             dataset_size=self.dataset_size,
-                                                                            tsv_url=f"src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv")
+                                                                            tsv_url=f"{TSV_URLS['train']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_{seed}.tsv")
         batch_size = self.batch_size
 
         # Now for each datapipe, create a dataloader.
@@ -253,27 +349,34 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
         
     def load_train_dataset(self):
-
-        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, )
-
+        seed = self.manual_seed
+        # self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url=f"{TSV_URLS['train']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_{seed}.tsv")
+        
+        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url="/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv")
         batch_size = self.batch_size
+        print("Using random number generator.")
         self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True)
 
-    def load_val_dataset(self):
 
-        # self.val_data_pipe = multimodal_dataset_pipe(split="val")
-        # for now, same as train
-        self.val_data_pipe = multimodal_dataset_pipe(split="val", indices=self.val_indices)
+    def load_val_dataset(self):
+        seed = self.manual_seed
+        self.val_data_pipe = multimodal_dataset_pipe(split="val", buffer_size=256, dataset_size=self.dataset_size, indices=self.val_indices, tsv_url=f"{TSV_URLS['val']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_val_seed_{seed}.tsv")  # This is for both curriculum and non-curriculum dataset (because only the training set changes).
         batch_size = self.val_batch_size
         self.val_dataloader = DataLoader(self.val_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.val_n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
     
-    def get_dataset_length(self, split='train') -> int:
-        if split == 'train':
-            return len(self.train_indices)
-        elif split == 'val':
-            return len(self.val_indices)
-        else:
-            return None
+    # def get_dataset_length(self, split='train', curriculum=False, quartile=0) -> int:
+    #     if not curriculum:
+    #         if split == 'train':
+    #             return len(self.train_indices)
+    #         elif split == 'val':
+    #             return len(self.val_indices)
+    #     else:
+    #         # Curriculum
+    #         assert quartile in [1, 2, 3, 4]
+    #         if quartile == 1:
+    #             return len(self.train_q1_n_samples)
+            
+            
 
     def print_dataset_stats(self):
 
@@ -281,14 +384,14 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         print('--- TRAIN DATASET STATS ---')
         print()
 
-        print('no of train samples: ', 3043190)
+        print('no of train samples: ', self.train_standard_n_samples)
 
         print()
         print('--- VAL DATASET STATS ---')
         print()
 
 
-        print('no of val samples: ', len(self.val_indices))
+        print('no of val samples: ', len(self.val_standard_n_samples))
 
 
 
@@ -337,13 +440,14 @@ def package_images_captions(batch):
             yield image, caption
 
 def filter_rows_curriculum(rows):
-    return [row for row in rows if row[0] != '']
+    return [row for row in rows if (row[0] != '' and row[0] != 'Unnamed: 0')]
 
 
-def filter_rows(rows, indices):
+def filter_rows(rows, indices=None):
     # Return the row if the index in the tsv is in the indices list. 
     # return [(row[0] != '') and (int(row[0]) in indices) for row in rows]
-    return [row for row in rows if (row[0] != '' and int(row[0]) in indices)]
+    # return [row for row in rows if (row[0] != '' and int(row[0]) in indices)]
+    return [row for row in rows if (row[0] != '' and row[0] != 'Unnamed: 0')]
     # res = []
     # for row in rows:
     #     if row[0] != '' and int(row[0]) in indices:
@@ -365,30 +469,31 @@ def _datapipe_from_tsv_url(
         # NO SHUFFLING
         )
 
-    else:
-        if indices is None:
-            # Return the whole datapipe.
-            datapipe = (
-                datapipe
-                # NO HEADER
-                .shuffle() # Load all the data.
+    # else:
+    #     if indices is None:
+    #         # Return the whole datapipe.
+    #         datapipe = (
+    #             datapipe
+    #             # NO HEADER
+    #             .shuffle() # Load all the data.
                 
-            )
-        else:
-            # The indices will actually depend on the supplied ones. For each split, the indices will be different.
-            # print(f"Indices for split: {split}: ", indices)
-            print("Length of indices: ", len(indices))
-            print("Type of indices: ", type(indices))
-            # datapipe = datapipe.slice(indices).readlines()
-            # from torchdata.datapipes.iter import LineReader
-            # datapipe = LineReader(datapipe.shuffle())
-            # print("Data pipe sliced: ", datapipe)
+    #         )
+    #     else:
+    #         # The indices will actually depend on the supplied ones. For each split, the indices will be different.
+    #         # print(f"Indices for split: {split}: ", indices)
+    #         print("Length of indices: ", len(indices))
+    #         print("Type of indices: ", type(indices))
+    #         # datapipe = datapipe.slice(indices).readlines()
+    #         # from torchdata.datapipes.iter import LineReader
+    #         # datapipe = LineReader(datapipe.shuffle())
+    #         # print("Data pipe sliced: ", datapipe)
 
 
     datapipe: dp = datapipe.sharding_filter().map(lambda line: line.split("\t")).batch(buffer_size)
 
     if not do_curriculum:
-        datapipe = (datapipe.map(lambda elements: filter_rows(elements, indices)))
+        # datapipe = (datapipe.map(lambda elements: filter_rows(elements, indices)))
+        datapipe = (datapipe.map(lambda elements: filter_rows(elements, None)))
     else:
         datapipe = datapipe.map(lambda elements: filter_rows_curriculum(elements))
 
@@ -408,9 +513,9 @@ def multimodal_dataset_pipe_curriculum(
     return _datapipe_from_tsv_url(tsv_url=tsv_url, buffer_size=buffer_size, dataset_size=dataset_size, indices=indices, split=split, do_curriculum=True)
 
 def multimodal_dataset_pipe(
-    split: str = "train", buffer_size: int = 8, dataset_size=-1, indices=None
+    split: str = "train", buffer_size: int = 8, dataset_size=-1, indices=None, tsv_url=None
 ) -> IterDataPipe[Tuple[Image.Image, str]]:
-    return _datapipe_from_tsv_url(tsv_url=TSV_URLS[split], buffer_size=buffer_size, dataset_size=dataset_size, indices=indices, split=split)
+    return _datapipe_from_tsv_url(tsv_url=tsv_url, buffer_size=buffer_size, dataset_size=dataset_size, indices=indices, split=split)
 
 
 
@@ -446,5 +551,5 @@ class ParallelSampleLoader(IterDataPipe):
 
             # for image, caption in zip(images, captions):
             for image, caption in zip(images, captions):
-                if image is not None:
+                if image is not None and caption is not None:
                     yield image, caption

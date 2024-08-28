@@ -1,5 +1,5 @@
 program: src/train_git_base_multimodal.py
-name: cl_multimodal
+name: cl_multimodal_train_val
 method: grid
 metric:
   goal: minimize
@@ -22,9 +22,9 @@ parameters:
   dataset_size:
     values: [-1]
   seed:
-    values: [0, 1, 2]
+    values: [0]
   model_name:
-    values: ['flamingo']
+    values: ['flamingo', 'git']
   model_type:
     values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
   max_token_length:
@@ -38,6 +38,8 @@ parameters:
   load_optimizer:
     values: [False]
   train_on_full_data:
+    values: [True]
+  do_val:
     values: [True]
   wandb_mode:
     values: ['online']

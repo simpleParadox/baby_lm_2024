@@ -46,3 +46,25 @@ for seed in [0, 1, 2]:
     
 # Save the df to a new .tsv file.
 df.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced.tsv", sep="\t", index=False)
+
+
+"""
+The following code is for creating a 5% held out validation set.
+"""
+import pandas as pd
+from tqdm import tqdm
+import numpy as np
+
+
+df = pd.read_csv("/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced.tsv", sep="\t")
+seed = 0
+# Randomly sample 5% of the rows and store it in df_val.
+df_val = df.sample(frac=0.05, random_state=seed)
+
+# Remove the rows that are present in df_val from df.
+df_train = df.drop(df_val.index)
+
+# Save the df and df_val to tsv files.
+df_train.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_{seed}.tsv", sep="\t", index=False)
+df_val.to_csv(f"/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_val_seed_{seed}.tsv", sep="\t", index=False)
+

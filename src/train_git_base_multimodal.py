@@ -26,29 +26,34 @@ import argparse  # This is necessary for wandb sweeps.
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, required=False, default=32)
-parser.add_argument('--dataset_size', type=int, required=False, default=100)
+parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=8)
 parser.add_argument('--n_workers', type=int, required=False, default=5)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
 parser.add_argument('--seed', type=int, required=False, default=0)
 parser.add_argument('--lr', type=float, required=False, default=1e-5)
 parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
-parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard fine-tuning.
-parser.add_argument('--model_type', help="causal or sequence. Case sensitive.", type=str, default='sequence')
+parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard training.
+parser.add_argument('--model_type', help="causal_lm or sequence. Case sensitive.", type=str, default='causal_lm')
 parser.add_argument('--model_name', type=str, default='flamingo')
 parser.add_argument('--use_accelerate', type=str, default=False)  # Whether to use accelerate or not.
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
 parser.add_argument('--max_token_length', type=int, default=50)
-parser.add_argument('--initialize_with_text', type=str, default=True)
+parser.add_argument('--initialize_with_text', type=str, default=False)
 parser.add_argument('--fp16', type=str, default=True)
 parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/')
 parser.add_argument('--text_init_model_path', type=str, default=None)
 parser.add_argument('--load_optimizer', type=str, default=False)
 parser.add_argument('--train_on_full_data', type=str, default=True, help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
+parser.add_argument('--do_val', type=str, default=True, help="Whether to do validation or not.")
 parser.add_argument('--wandb_mode', type=str, default='disabled', required=False)
 
 args = parser.parse_args()
 
+if args.do_val == False or args.do_val == 'False':
+    args.do_val = False
+else:
+    args.do_val = True
 
 if args.train_on_full_data == False or args.train_on_full_data == 'False':
     args.train_on_full_data = False
@@ -224,10 +229,7 @@ baby_model.to(device).train()
 # print("Model loaded")
 # print(baby_model)
 
-do_val = True
-if args.train_on_full_data:
-    print("Because train_on_full_data is True, setting do_val to False.")
-    do_val = False
+do_val = args.do_val
 
 print("Loading dataset processor")
 multimodal_dataset_processor = MultiModalDatasetProcessor(batch_size=batch_size, dataset_size=dataset_size, 
@@ -249,10 +251,13 @@ if not args.do_curriculum:
     else:
         training_dataloader = multimodal_dataset_processor.train_dataloader
         if do_val:
+            print("Loading val dataloader")
             val_dataloader = multimodal_dataset_processor.val_dataloader
 else:
-    # Only for training.
     curriculum_dataloaders = multimodal_dataset_processor.curriculum_dataloaders  # This is a list.
+    if do_val:
+        print("Loading val dataloader")
+        val_dataloader = multimodal_dataset_processor.val_dataloader
 
 if not args.do_curriculum:
     num_batches = multimodal_dataset_processor.get_num_batches_train()
@@ -279,19 +284,24 @@ print(f"Train = {train}")
 print("Training")
 if not args.do_curriculum:
     print("Standard training.")
+    
     for epoch in epoch_iterator:
         # Training.
         running_loss = 0.0
         average_running_loss = 0.0
         batch_step = 0
+        number_of_samples_per_epoch = 0 # This is set to zero every epoch.
+        failed_batches = 0
         batch_iterator = tqdm(total=num_batches+1, disable=False, desc=f'epoch: {epoch}')
         for preprocessed_images, captions in training_dataloader:
-
+            
             optimizer.zero_grad()
             try:
                 tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+                number_of_samples_per_epoch += len(captions)
             except:
                 print("Error in tokenizing captions: ", captions)
+                failed_batches += 1
                 continue
             input_ids = tokenized_captions['input_ids'].to(device)
             attention_mask = tokenized_captions['attention_mask'].to(device)
@@ -311,25 +321,28 @@ if not args.do_curriculum:
                 loss.backward()
                 optimizer.step()
 
-            running_loss += (loss.item() * input_ids.size(0))
+            running_loss += (loss.item() * input_ids.size(0)) # This will change based on the batch size, which could be less than 32.
             average_running_loss += loss.item()  # This is already divided by the batch size.
 
             batch_iterator.set_description(f'epoch: {epoch} loss: {loss.item()}')
             batch_iterator.update(1)
             global_step += 1
 
-            # Log the loss every 50 steps.
+            # Log the loss every 100 steps.
             if batch_step % 100 == 0:
                 average_train_loss_per_batch = average_running_loss / (batch_step + 1)  # This is correct - if in doubt, think about it. It's the average batch loss.
                 wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
             
             batch_step += 1
 
-            
-        epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
+        # Epoch loss over the whole dataset.
+        epoch_loss = running_loss / number_of_samples_per_epoch  # This is good because if the batch size changes during training, it will be accounted for here.
         wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
         
-        best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
+        # Log the failed batches.
+        wandb.log({"failed_batches": failed_batches, "epoch": epoch})
+        
+        best_args = {f'epoch_{epoch}_loss': epoch_loss}
         # Save the args_dict in the same directory as json.
         if not os.path.exists(model_save_path):
             os.makedirs(model_save_path)
@@ -338,16 +351,16 @@ if not args.do_curriculum:
             print("Args saved.")
         
         if args.train_on_full_data:
-            # Save the model every 5 epochs.
-            if (epoch+1) % min_save_every == 0:
-                epoch_path = model_save_path + f'epoch_{epoch+1}/'
+            # Save the model every min_save_every epochs.
+            if (epoch) % min_save_every == 0:
+                epoch_path = model_save_path + f'epoch_{epoch}/'
                 if not os.path.exists(epoch_path):
                     os.makedirs(epoch_path)
                 baby_model.save_model(epoch_path)
                 print("Model saved at epoch: ", epoch)
         
         
-        if not args.train_on_full_data:
+        if args.do_val:
             if epoch % 1 == 0:
                 num_batches_val = multimodal_dataset_processor.get_num_batches_val()
                 print("Num batches val: ", num_batches_val)
@@ -357,11 +370,15 @@ if not args.do_curriculum:
                 baby_model.eval()
                 print("Eval mode")
                 eval_loss = 0.0
+                failed_val_batches = 0
+                number_of_samples_per_epoch_val = 0
                 for preprocessed_images, captions in tqdm(val_dataloader):
                     try:
                         tokenized_captions = baby_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+                        number_of_samples_per_epoch_val += len(captions)
                     except:
                         print("Error in tokenizing captions: ", captions)
+                        failed_val_batches += 1
                         print("Continuing...")
                         continue
                     input_ids = tokenized_captions['input_ids'].to(device)
@@ -378,19 +395,20 @@ if not args.do_curriculum:
 
                     eval_loss += (loss.item() * input_ids.size(0))
                     val_iterator.update(1)
-                current_val_loss = eval_loss / multimodal_dataset_processor.get_dataset_length('val')
+                wandb.log({"failed_val_batches": failed_val_batches, "epoch": epoch})
+                current_val_loss = eval_loss / number_of_samples_per_epoch_val
                 wandb.log({'val_loss': current_val_loss})
-                if current_val_loss <= minimum_val_loss:
+                if current_val_loss <= min_val_loss:
+                    print("Model saved.")
+                    min_val_loss = current_val_loss
+                    best_args['min_val_loss'] = current_val_loss
+                    best_args['best_min_val_loss_epoch'] = epoch
+                
+                    # Save the best_args in the same directory as json.
                     if not os.path.exists(model_save_path):
                         os.makedirs(model_save_path)
-                    baby_model.save_model(model_save_path)
-                    print("Model saved.")
-                    minimum_val_loss = current_val_loss
-                    wandb.log({'min_val_loss': minimum_val_loss})
-                    args_dict['min_val_loss'] = current_val_loss
-                    # Save the args_dict in the same directory as json.
                     with open(model_save_path + 'args.json', 'w') as f:
-                        json.dump(args_dict, f)
+                        json.dump(best_args, f)
                         print("Args saved.")
                 print("Validation done.")
                 baby_model.train()
@@ -403,7 +421,8 @@ else:
         running_loss = 0.0
         average_running_loss = 0.0
         batch_step = 0
-
+        number_of_samples_per_epoch = 0 # This is set to zero every epoch.
+        failed_batches = 0
         # Select the correct dataloader based on the epoch.
         if epoch < 2:
             training_dataloader = curriculum_dataloaders[0]
@@ -419,12 +438,14 @@ else:
             batch_iterator = tqdm(total=curriculum_num_batches[3], disable=False, desc=f'epoch: {epoch}')
 
         for preprocessed_images, captions in training_dataloader:
-
+            
             optimizer.zero_grad()
             try:
                 tokenized_captions = baby_model.tokenizer(text=captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device) # TODO: Check if max length is alright.
+                number_of_samples_per_epoch += len(captions)
             except:
                 print("Error in tokenizing captions: ", captions)
+                failed_batches += 1
                 continue
             input_ids = tokenized_captions['input_ids'].to(device)
             attention_mask = tokenized_captions['attention_mask'].to(device)
@@ -451,17 +472,19 @@ else:
             batch_iterator.update(1)
             global_step += 1
 
-            # Log the loss every 50 steps.
+            # Log the loss every 100 steps.
             if batch_step % 100 == 0:
                 average_train_loss_per_batch = average_running_loss / (batch_step + 1)
                 wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
             
             batch_step += 1
             
-        epoch_loss = running_loss / multimodal_dataset_processor.get_dataset_length('train')
+        epoch_loss = running_loss / number_of_samples_per_epoch
         wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
         
-        best_args = {'epoch': epoch, 'epoch_loss': epoch_loss}
+        wandb.log({"failed_batches": failed_batches, "epoch": epoch})
+        
+        best_args = {f'epoch_{epoch}_loss': epoch_loss}
         # Save the args_dict in the same directory as json.
         if not os.path.exists(model_save_path):
             os.makedirs(model_save_path)
@@ -470,19 +493,69 @@ else:
             print("Args saved.")
         
         if args.train_on_full_data:
-            # Save the model every 5 epochs.
-            if (epoch+1) % min_save_every == 0:
-                epoch_path = model_save_path + f'epoch_{epoch+1}/'
+            # Save the model every min_save_every epochs.
+            if (epoch) % min_save_every == 0:
+                epoch_path = model_save_path + f'epoch_{epoch}/'
                 if not os.path.exists(epoch_path):
                     os.makedirs(epoch_path)
                 baby_model.save_model(epoch_path)
                 print("Model saved at epoch: ", epoch)
+        if args.do_val:
+            if epoch % 1 == 0:
+                num_batches_val = multimodal_dataset_processor.get_num_batches_val()
+                print("Num batches val: ", num_batches_val)
+                val_iterator = tqdm(total=num_batches_val, desc='Validation')
+                print("Validating")
+                baby_model.eval()
+                print("Eval mode")
+                eval_loss = 0.0
+                failed_val_batches = 0
+                number_of_samples_per_epoch_val = 0
+                for preprocessed_images, captions in tqdm(val_dataloader):
+                    try:
+                        tokenized_captions = baby_model.tokenizer(captions, padding=True, truncation=True, return_tensors="pt", max_length=args.max_token_length).to(device)
+                        number_of_samples_per_epoch_val += len(captions)
+                    except:
+                        print("Error in tokenizing captions: ", captions)
+                        failed_val_batches += 1
+                        print("Continuing...")
+                        continue
+                    input_ids = tokenized_captions['input_ids'].to(device)
+                    attention_mask = tokenized_captions['attention_mask'].to(device)
+                    preprocessed_images = preprocessed_images.to(device)
 
-if args.train_on_full_data:
-    model_save_path = model_save_path + 'final_model/'
+                    if args.fp16:
+                        with torch.autocast(device_type=device_autocast, dtype=torch.float16):
+                            model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                            loss = model_outputs.loss
+                    else:
+                        model_outputs = baby_model(pixel_values=preprocessed_images, input_ids=input_ids, attention_mask=attention_mask)
+                        loss = model_outputs.loss
+
+                    eval_loss += (loss.item() * input_ids.size(0))
+                    val_iterator.update(1)
+                wandb.log({"failed_val_batches": failed_val_batches, "epoch": epoch})
+                current_val_loss = eval_loss / number_of_samples_per_epoch_val
+                wandb.log({'val_loss': current_val_loss})
+                if current_val_loss <= min_val_loss:
+                    print("Model saved.")
+                    min_val_loss = current_val_loss
+                    best_args['min_val_loss'] = current_val_loss
+                    best_args['best_min_val_loss_epoch'] = epoch
+                
+                    # Save the best_args in the same directory as json.
+                    if not os.path.exists(model_save_path):
+                        os.makedirs(model_save_path)
+                    with open(model_save_path + 'args.json', 'w') as f:
+                        json.dump(best_args, f)
+                        print("Args saved.")
+                print("Validation done.")
+                baby_model.train()
+                print("Train mode")
+
+if args.train_on_full_data: # This is after th if-else block because we want it to happen for both cases.
+    model_save_path = model_save_path + f'final_model/'
     if not os.path.exists(model_save_path):
         os.makedirs(model_save_path)
-    baby_model.save_model(model_save_path)
-    print("Model saved.")
     # Save the optimizer.
     torch.save(optimizer.state_dict(), f"{model_save_path}optimizer_after_training_{n_epochs}_epochs.pth")

@@ -1,4 +1,4 @@
-from transformers import GitProcessor, CLIPImageProcessor, PreTrainedTokenizerFast
+from transformers import GitProcessor, CLIPImageProcessor, PreTrainedTokenizerFast, AutoProcessor
 import torch
 import random
 import numpy as np
@@ -197,7 +197,7 @@ class BabyGitModel(nn.Module):
                 self.model = GitForCausalLM.from_pretrained(text_init_model_path + '/final_model/', local_files_only=True)
             elif not baseline_causal_lm and baseline_sequence_classification:
                 self.model_type = "sequence"
-                self.model = GitForSequenceClassification.from_pretrained(text_init_model_path, local_files_only=True, use_pretrained_encoder=False) # setting this to False will load the pre-trained weights from the causal_lm model.
+                self.model = GitForSequenceClassification.from_pretrained(text_init_model_path, local_files_only=True) # setting this to False will load the pre-trained weights from the causal_lm model.
             else:
                 raise ValueError("Please specify either baseline_git_causal_lm or baseline_git_sequence_classification as True (but not both)")
         
@@ -207,15 +207,16 @@ class BabyGitModel(nn.Module):
                 
                 
         else:
-            print("Loading a randomly initialized model.")
             git_config_path = "/home/rsaha/projects/babylm/git-2024/config.json"
             git_config = GitConfig.from_pretrained(git_config_path)
 
             # Set the manual seed that will be later used to set the determinism in the modeling_git.py file.
             git_config.manual_seed = manual_seed
+            print("Loading a randomly initialized model.")
             if baseline_causal_lm and not baseline_sequence_classification:
                 self.model_type = "causal_lm"
                 self.model = GitForCausalLM(config=git_config)
+
             elif not baseline_causal_lm and baseline_sequence_classification:
                 self.model_type = "sequence"
                 self.model = GitForSequenceClassification(config=git_config)
@@ -255,17 +256,10 @@ class BabyGitModel(nn.Module):
         # The following code block is redundant because in modeling_git.py the forward method supposedly handles this internally.
         # This is because pixel_values has a default value of None.
         # If pixel_values are none, then it won't be conditioned on.
-        if self.model_type == "sequence":
-            if pixel_values == None:
-                model_outputs = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
-            else:
-                model_outputs = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
-        
-        elif self.model_type == "causal_lm":
-            if pixel_values == None:
-                model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
-            else:
-                model_outputs: CausalLMOutputWithPast = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
+        if pixel_values == None:
+            model_outputs = self.model(input_ids=input_ids, labels=input_ids, attention_mask=attention_mask)
+        else:
+            model_outputs = self.model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, attention_mask=attention_mask)
 
         return model_outputs
 
