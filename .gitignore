@@ -49,7 +49,8 @@ test/evaluation-pipeline-2024-main/examples/wandb
 test/evaluation-pipeline-2024-main/evaluation_data/
 
 
-test/evaluation-pipeline-2024/
+hfdata_cache/
+evaluation-pipeline-2024/
 
 BabyBERTa/
 git-2024/
