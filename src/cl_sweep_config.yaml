@@ -1,5 +1,5 @@
 program: src/train_git_base_multimodal.py
-name: cl_multimodal_train_val
+name: cl_multimodal_train_val_text_init
 method: grid
 metric:
   goal: minimize
@@ -14,7 +14,7 @@ parameters:
   min_save_every:
     values: [1]
   n_workers:
-    values: [5]
+    values: [6]
   optimizer:
     values: ["adam"]
   do_curriculum:
@@ -30,7 +30,7 @@ parameters:
   max_token_length:
     values: [50]
   initialize_with_text:
-    values: [False]
+    values: [True]
   use_accelerate:
     values: [False]
   fp16:

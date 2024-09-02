@@ -140,7 +140,6 @@ class BabyFlamingoModel(nn.Module):
         assert model_save_path is not None, "Please provide a model_save_path."
         self.model.save_pretrained(model_save_path)
         print(f"Model saved at {model_save_path}")
-                    
 
 class BabyGitModel(nn.Module):
     

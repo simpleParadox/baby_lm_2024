@@ -81,8 +81,8 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.batch_size = batch_size
         self.val_batch_size = 8
 
-        self.n_workers = n_workers
-        self.val_n_workers = 28
+        self.n_workers = 5 #n_workers
+        self.val_n_workers = 5
         self.manual_seed = manual_seed
         self.do_curriculum = do_curriculum
         self.train_indices = None
