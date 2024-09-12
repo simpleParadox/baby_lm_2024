@@ -81,7 +81,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         self.batch_size = batch_size
         self.val_batch_size = 8
 
-        self.n_workers = 5 #n_workers
+        self.n_workers = n_workers
         self.val_n_workers = 5
         self.manual_seed = manual_seed
         self.do_curriculum = do_curriculum
@@ -327,18 +327,18 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         # Load the datasets for that seed.
         train_datapipe_quartile_1 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256, 
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_1_seed_{seed}_assigned_max_replaced_train.tsv")
+                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_1_seed_0_assigned_max_replaced_train.tsv")
         train_datapipe_quartile_2 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_2_seed_{seed}_assigned_max_replaced_train.tsv")
+                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_2_seed_0_assigned_max_replaced_train.tsv")
         train_datapipe_quartile_3 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                         dataset_size=self.dataset_size,
-                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_3_seed_{seed}_assigned_max_replaced_train.tsv")
+                                                                        tsv_url=f"{CURRICULUM_TSV_URLS['train']}quartile_3_seed_0_assigned_max_replaced_train.tsv")
         
         # The fourth quartile dataset contains all the rows.
         train_datapipe_quartile_4 = multimodal_dataset_pipe_curriculum(split="train", buffer_size=256,
                                                                             dataset_size=self.dataset_size,
-                                                                            tsv_url=f"{TSV_URLS['train']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_{seed}.tsv")
+                                                                            tsv_url=f"{TSV_URLS['train']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_0.tsv")
         batch_size = self.batch_size
 
         # Now for each datapipe, create a dataloader.
@@ -360,7 +360,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
 
     def load_val_dataset(self):
         seed = self.manual_seed
-        self.val_data_pipe = multimodal_dataset_pipe(split="val", buffer_size=256, dataset_size=self.dataset_size, indices=self.val_indices, tsv_url=f"{TSV_URLS['val']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_val_seed_{seed}.tsv")  # This is for both curriculum and non-curriculum dataset (because only the training set changes).
+        self.val_data_pipe = multimodal_dataset_pipe(split="val", buffer_size=256, dataset_size=self.dataset_size, indices=self.val_indices, tsv_url=f"{TSV_URLS['val']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_val_seed_0.tsv")  # This is for both curriculum and non-curriculum dataset (because only the training set changes).
         batch_size = self.val_batch_size
         self.val_dataloader = DataLoader(self.val_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.val_n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed))
     

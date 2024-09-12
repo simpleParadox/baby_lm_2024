@@ -30,7 +30,7 @@ parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=8)
 parser.add_argument('--n_workers', type=int, required=False, default=5)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
-parser.add_argument('--seed', type=int, required=False, default=0)
+parser.add_argument('--seed', type=int, required=False, default=1)
 parser.add_argument('--lr', type=float, required=False, default=1e-5)
 parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
 parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard training.
@@ -39,7 +39,7 @@ parser.add_argument('--model_name', type=str, default='git')
 parser.add_argument('--use_accelerate', type=str, default=False)  # Whether to use accelerate or not.
 parser.add_argument('--gradient_accumulation_steps', type=int, default=1)  # This is only used if use_accelerate is True.
 parser.add_argument('--max_token_length', type=int, default=50)
-parser.add_argument('--initialize_with_text', type=str, default=True)
+parser.add_argument('--initialize_with_text', type=str, default=False)
 parser.add_argument('--fp16', type=str, default=True)
 parser.add_argument('--tokenizer_path', type=str, default='./src/tokenizer/hf_wordpiece_tokenizer_from_bert-base-uncased/')
 parser.add_argument('--text_init_model_path', type=str, default=None)

@@ -1,5 +1,5 @@
 program: src/train_git_base_multimodal.py
-name: cl_multimodal_train_val_text_init
+name: cl_multimodal_train_val_seed_1_and_2
 method: grid
 metric:
   goal: minimize
@@ -14,7 +14,7 @@ parameters:
   min_save_every:
     values: [1]
   n_workers:
-    values: [6]
+    values: [5]
   optimizer:
     values: ["adam"]
   do_curriculum:
@@ -22,15 +22,15 @@ parameters:
   dataset_size:
     values: [-1]
   seed:
-    values: [0]
+    values: [1,2]
   model_name:
-    values: ['flamingo', 'git']
+    values: ['git']
   model_type:
     values: ['causal_lm']  # Can be 'causal_lm' or 'sequence'.
   max_token_length:
     values: [50]
   initialize_with_text:
-    values: [True]
+    values: [False]
   use_accelerate:
     values: [False]
   fp16:
