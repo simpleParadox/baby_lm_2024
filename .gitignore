@@ -78,3 +78,5 @@ scripts.sh
 
 
 /src/taggers/data_for_training/
+internet.sh
+profile.json

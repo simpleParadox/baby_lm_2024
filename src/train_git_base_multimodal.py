@@ -8,6 +8,11 @@ sys.path.append('/home/rsaha/projects/baby_lm_2024/src/datasets')
 sys.path.append('/home/rsaha/projects/baby_lm_2024/git-2024')
 
 
+sys.path.append('/home/rsaha/scratch/baby_lm_2024/src/datasets')
+sys.path.append('/home/rsaha/scratch/baby_lm_2024/git-2024')
+
+
+
 import torch
 from functions import find_best_model_path
 from multimodal_dataset_processor import MultiModalDatasetProcessor
@@ -253,7 +258,6 @@ print(f"Total Parameters: {total_params:,}")
 print(f"Trainable Parameters: {trainable_params:,}")
 print(f"Non-Trainable Parameters: {non_trainable_params:,}")
 print(f"---------------------")
-import pdb; pdb.set_trace()
 # print("Model loaded")
 # print(baby_model)
 

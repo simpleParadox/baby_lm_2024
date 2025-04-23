@@ -4,6 +4,9 @@ import random
 from torch.utils.data import DataLoader, Subset
 import sys
 sys.path.append('/home/rsaha/projects/baby_lm_2024/src/datasets')
+sys.path.append('/home/rsaha/scratch/baby_lm_2024/src/datasets')
+sys.path.append('/home/rsaha/projects/baby_lm_2024')
+sys.path.append('/home/rsaha/scratch/baby_lm_2024')
 from dataset_processor_parent import DatasetProcessorParent
 import numpy as np
 
@@ -19,6 +22,17 @@ from typing import Generator, List, Tuple, Sequence
 import asyncio
 
 from torch import Tensor
+
+
+import os
+
+import json
+profile = json.load(open('profile.json'))
+print("Profile: ", profile)
+if profile['cluster'] == 'cirrus':
+    train_tsv_url = '/home/rsaha/projects/baby_lm_2024/src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv'
+elif profile['cluster'] == 'vulcan':
+    train_tsv_url = '/home/rsaha/scratch/baby_lm_2024/src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv'
 
 TSV_URLS = {
     'train': 'src/datasets/multimodal_train/',
@@ -352,7 +366,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         seed = self.manual_seed
         # self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url=f"{TSV_URLS['train']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_{seed}.tsv")
         
-        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url="/home/rsaha/projects/baby_lm_2024/src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv")
+        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url=train_tsv_url)
         batch_size = self.batch_size
         print("Using random number generator.")
         self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True)

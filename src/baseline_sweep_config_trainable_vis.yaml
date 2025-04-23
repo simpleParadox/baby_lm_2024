@@ -1,5 +1,5 @@
 program: src/train_git_base_multimodal.py
-name: baseline_flamingo_multimodal_train_val_caption_only_seed_1_and_2
+name: trainable_vis_baseline_flamingo_multimodal_train_val_caption_only_seed_1_and_2
 method: grid
 metric:
   goal: minimize
@@ -42,4 +42,6 @@ parameters:
   do_val:
     values: [False] # False means no validation. The indices of the train and the validation data are adjusted accordingly if the value is True.
   wandb_mode:
-    values: ['online']
+    values: ['offline']
+  unfreeze_vision_encoder:
+    values: [True] # True means freezing the vision encoder.
