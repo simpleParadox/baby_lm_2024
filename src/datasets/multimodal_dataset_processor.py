@@ -3,7 +3,7 @@ import torch
 import random
 from torch.utils.data import DataLoader, Subset
 import sys
-sys.path.append('/home/rsaha/projects/babylm/src/datasets')
+sys.path.append('/home/rsaha/projects/baby_lm_2024/src/datasets')
 from dataset_processor_parent import DatasetProcessorParent
 import numpy as np
 
@@ -92,36 +92,36 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         # if dataset_size > 0:
         #     self.full_range = np.arange(0, dataset_size)
 
-        # if do_val:
-        #     # Set the split ratios
-        #     train_ratio = 0.9
+        if do_val:
+            # Set the split ratios
+            train_ratio = 0.9
 
-        #     # Calculate the split indices
-        #     num_samples = len(self.full_range)
-        #     train_end = int(train_ratio * num_samples)
+            # Calculate the split indices
+            num_samples = len(self.full_range)
+            train_end = int(train_ratio * num_samples)
 
-        #     # Shuffle the indices to ensure randomness
-        #     np.random.seed(manual_seed)
-        #     np.random.shuffle(self.full_range)
+            # Shuffle the indices to ensure randomness
+            np.random.seed(manual_seed)
+            np.random.shuffle(self.full_range)
 
-        #     # Split the indices into train, val, and test sets
-        #     self.train_indices = self.full_range[:train_end]
-        #     self.val_indices = self.full_range[train_end:]
+            # Split the indices into train, val, and test sets
+            self.train_indices = self.full_range[:train_end]
+            self.val_indices = self.full_range[train_end:]
 
-        #     # Convert the indices to lists (optional, as they are already arrays)
-        #     self.train_indices = self.train_indices.tolist()
-        #     self.val_indices = self.val_indices.tolist()
+            # Convert the indices to lists (optional, as they are already arrays)
+            self.train_indices = self.train_indices.tolist()
+            self.val_indices = self.val_indices.tolist()
 
-        #     # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
-        #     indices_train_set = set(self.train_indices)
-        #     indices_val_set = set(self.val_indices)
+            # Calculate the overlap between the indices. Use sets and find set intersection. the length of the intersection should be 0.
+            indices_train_set = set(self.train_indices)
+            indices_val_set = set(self.val_indices)
 
-        #     assert len(indices_train_set.intersection(indices_val_set)) == 0
-        #     print("No overlap between the indices of the train and val sets.")
-        # else:
-        #     self.train_indices = self.full_range[:]
-        #     self.val_indices = []
-        #     self.val_dataset = None
+            assert len(indices_train_set.intersection(indices_val_set)) == 0
+            print("No overlap between the indices of the train and val sets.")
+        else:
+            self.train_indices = self.full_range[:]
+            self.val_indices = []
+            self.val_dataset = None
 
 
         self.device = device
@@ -352,7 +352,7 @@ class MultiModalDatasetProcessor(DatasetProcessorParent):
         seed = self.manual_seed
         # self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url=f"{TSV_URLS['train']}all_multimodal_all_concaps_with_pos_tags_with_noun_counts_assigned_max_replaced_train_seed_{seed}.tsv")
         
-        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url="/home/rsaha/projects/babylm/src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv")
+        self.train_data_pipe = multimodal_dataset_pipe(split="train", buffer_size=256, dataset_size=self.dataset_size, indices=self.train_indices, tsv_url="/home/rsaha/projects/baby_lm_2024/src/datasets/multimodal_train/all_multimodal_all_concaps_uncompressed_dropped_first_col.tsv")
         batch_size = self.batch_size
         print("Using random number generator.")
         self.train_dataloader = DataLoader(self.train_data_pipe, batch_size=batch_size, collate_fn=self.collate_fn, num_workers=self.n_workers, persistent_workers=True, worker_init_fn=self.seed_dataloader_worker, generator=torch.Generator().manual_seed(self.manual_seed), pin_memory=True)

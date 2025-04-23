@@ -3,6 +3,11 @@ sys.path.append('../git-2024') # NOTE: Might need to change this according to th
 sys.path.append('../src/datasets')
 sys.path.append('/home/rsaha/projects/babylm/src/datasets')
 sys.path.append('/home/rsaha/projects/babylm/git-2024')
+
+sys.path.append('/home/rsaha/projects/baby_lm_2024/src/datasets')
+sys.path.append('/home/rsaha/projects/baby_lm_2024/git-2024')
+
+
 import torch
 from functions import find_best_model_path
 from multimodal_dataset_processor import MultiModalDatasetProcessor
@@ -30,7 +35,7 @@ parser.add_argument('--dataset_size', type=int, required=False, default=-1)
 parser.add_argument('--n_epochs', type=int, required=False, default=8)
 parser.add_argument('--n_workers', type=int, required=False, default=5)
 parser.add_argument('--min_save_every', type=int, required=False, default=1)
-parser.add_argument('--seed', type=int, required=False, default=1)
+parser.add_argument('--seed', type=int, required=False, default=0)
 parser.add_argument('--lr', type=float, required=False, default=1e-5)
 parser.add_argument('--optimizer', help="adamw, adam or sgd", type=str, required=False, default='adam')
 parser.add_argument('--do_curriculum', type=str, default=False)  # If this is False, then do standard training.
@@ -47,6 +52,7 @@ parser.add_argument('--load_optimizer', type=str, default=False)
 parser.add_argument('--train_on_full_data', type=str, default=True, help="Whether to train on the full data or not. If provided, the model will be trained on the full data.") # Default value is False.
 parser.add_argument('--do_val', type=str, default=True, help="Whether to do validation or not.")
 parser.add_argument('--wandb_mode', type=str, default='disabled', required=False)
+parser.add_argument('--unfreeze_vision_encoder', type=str, default=False, help="Whether to unfreeze the vision encoder for flamingo.") # Default value is False.
 
 args = parser.parse_args()
 
@@ -84,6 +90,13 @@ if args.fp16 == False or args.fp16 == 'False':
     args.fp16 = False
 else:
     args.fp16 = True
+
+
+
+if args.unfreeze_vision_encoder == False or args.unfreeze_vision_encoder == 'False':
+    args.unfreeze_vision_encoder = False
+else:
+    args.unfreeze_vision_encoder = True
 
 
 # Must use this tokenizer for both GIT and Flamingo.
@@ -154,6 +167,8 @@ elif args.model_name == 'git':
 
 if args.train_on_full_data:
     model_save_path += 'full_data/'
+else:
+    model_save_path += 'not_full_data/'
 
 
 
@@ -202,7 +217,7 @@ elif args.model_name == 'flamingo':
                                 initialize_with_text=args.initialize_with_text,
                                 tokenizer_path=args.tokenizer_path,
                                 text_init_model_path=args.text_init_model_path,
-                                load_optimizer=args.load_optimizer)
+                                load_optimizer=args.load_optimizer, unfreeze_vision_encoder=args.unfreeze_vision_encoder)
 else:
     raise ValueError('Other models not supported yet.')
 
@@ -226,6 +241,19 @@ if args.load_optimizer:
     optimizer.load_state_dict(baby_model.optimizer_state_dict)
 
 baby_model.to(device).train()
+
+
+# Calculate and print model parameters
+total_params = sum(p.numel() for p in baby_model.parameters())
+trainable_params = sum(p.numel() for p in baby_model.parameters() if p.requires_grad)
+non_trainable_params = total_params - trainable_params
+
+print(f"--- Model Summary ---")
+print(f"Total Parameters: {total_params:,}")
+print(f"Trainable Parameters: {trainable_params:,}")
+print(f"Non-Trainable Parameters: {non_trainable_params:,}")
+print(f"---------------------")
+import pdb; pdb.set_trace()
 # print("Model loaded")
 # print(baby_model)
 

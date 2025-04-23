@@ -3,6 +3,11 @@ sys.path.append('../git-2024') # NOTE: Might need to change this according to th
 sys.path.append('../src/datasets')
 sys.path.append('/home/rsaha/projects/babylm/src/datasets')
 sys.path.append('/home/rsaha/projects/babylm/git-2024')
+
+sys.path.append('/home/rsaha/projects/baby_lm_2024/src/datasets')
+sys.path.append('/home/rsaha/projects/baby_lm_2025/git-2024')
+
+
 from text_dataset_processor import TextDatasetProcessor
 import torch
 from models.git_base import BabyGitModel
@@ -100,7 +105,7 @@ n_epochs=args.n_epochs
 n_workers = args.n_workers
 # Create accelerator.
 if args.use_accelerate:
-    accelerator = Accelerator(gradient_accumulation_steps=2)
+    accelerator = Accelerator(gradient_accumulation_steps=1)
     device = accelerator.device
 else:
     print("Not using accelerate")
@@ -295,6 +300,7 @@ for epoch in epoch_iterator:
         if batch_step % 100 == 0:
             average_train_loss_per_batch = average_running_loss / (batch_step + 1)
             wandb.log({"average_train_loss_per_batch": average_train_loss_per_batch, "epoch": epoch, "batch_step": batch_step})
+            
     
     epoch_loss = running_loss / text_dataset_processor.get_dataset_length('train')
     wandb.log({"epoch_loss": epoch_loss, "epoch": epoch})
@@ -352,13 +358,13 @@ for epoch in epoch_iterator:
             current_val_loss = eval_loss / text_dataset_processor.get_dataset_length('val')
             wandb.log({'val_loss': current_val_loss})
             
-            if current_val_loss <= minimum_val_loss:
+            if current_val_loss <= min_val_loss:
                 if not os.path.exists(model_save_path):
                     os.makedirs(model_save_path)
                 baby_model.save_model(model_save_path)
                 print("Model saved.")
-                minimum_val_loss = current_val_loss
-                wandb.log({'min_val_loss': minimum_val_loss})
+                min_val_loss = current_val_loss
+                wandb.log({'min_val_loss': min_val_loss})
                 args_dict['min_val_loss'] = current_val_loss
                 # Save the args_dict in the same directory as json.
                 with open(model_save_path + 'best_args.json', 'w') as f:

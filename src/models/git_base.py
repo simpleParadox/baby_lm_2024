@@ -18,12 +18,15 @@ import json
 
 
 import sys
+import os
 sys.path.append("../../git-2024")
 sys.path.append('git-2024')
 
 # add flamingo to the path
 sys.path.append("../../flamingo-2024")
 sys.path.append('flamingo-2024')
+
+
 
 from configuration_flamingo import FlamingoConfig
 from configuration_git import GitConfig
@@ -55,7 +58,10 @@ class BabyFlamingoModel(nn.Module):
     tokenizer_path='./src/tokenizer/multi_50m_and_captions_tokenizer_bert_wordpiece.json',
     text_init_model_path=None,
     load_optimizer=False,
+    unfreeze_vision_encoder=False,
     **kwargs):
+        
+        # unfreeze_vision_encoder is False by default to keep in line of the original babylm flamingo config.
 
         super(BabyFlamingoModel, self).__init__()
         
@@ -65,7 +71,7 @@ class BabyFlamingoModel(nn.Module):
 
         # Load custom config.
         # print("Loading preprocessor from babylm config")
-        processor_config_path = "/home/rsaha/projects/babylm/flamingo-2024/preprocessor_config.json"
+        processor_config_path = os.getcwd() + "/flamingo-2024/preprocessor_config.json"
         processor_config = json.load(open(processor_config_path, 'r'))
         self.clip_image_processor = CLIPImageProcessor(processor_config)
         # clip image processor should be ok because its just cropping and transforming the image without a learned network
@@ -107,9 +113,10 @@ class BabyFlamingoModel(nn.Module):
                 
                 
         else:
-            flamingo_config_path = "/home/rsaha/projects/babylm/flamingo-2024/config.json"
+            flamingo_config_path = os.getcwd() + "/flamingo-2024/config.json"
             flamingo_config = FlamingoConfig.from_pretrained(flamingo_config_path)
             flamingo_config.manual_seed = manual_seed
+            flamingo_config.unfreeze_vision_encoder = unfreeze_vision_encoder
             print("Loading a randomly initialized model.")
             if baseline_causal_lm and not baseline_sequence_classification:
                 self.model_type = "causal_lm"
